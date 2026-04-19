@@ -1,11 +1,14 @@
 from fastapi import FastAPI
-from starlette import status
+from app.routers import auth
 
 app = FastAPI(
     title="Спортивный портал по плаванию",
-    description="Платформа для проведения соревнований по плаванию, Новости в сфере плавания, Обучающие материалы",
+    description="Платформа для управления соревнованиями, заплывами и результатами",
     version="1.0.0",
 )
+
+# Подключаем роутеры API
+app.include_router(auth.router)
 
 
 @app.get("/")
