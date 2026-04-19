@@ -1,5 +1,4 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
 from app.models import UserRole
 
@@ -24,19 +23,7 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
-class Token(BaseModel):
-    """Схема для ответа с токеном"""
 
-    access_token: str
-    token_type: str
-
-
-class TokenData(BaseModel):
-    """Схема для данных внутри токена"""
-
-    user_id: Optional[int] = None

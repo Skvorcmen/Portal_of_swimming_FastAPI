@@ -1,5 +1,6 @@
 import asyncio
 
+from app.core.exceptions import InvalidCredentialsError, UserAlreadyExistsError
 from app.database import async_session_maker
 from app.models import UserRole
 from app.services.auth_service import AuthService
@@ -9,38 +10,31 @@ async def test_service():
     async with async_session_maker() as session:
         service = AuthService(session)
 
-        # Тест: регистрация нового пользователя
         print("1. Регистрация нового пользователя...")
-        success, user, error = await service.register_user(
-            email="service@test.com",
-            username="serviceuser",
-            password="123",
-            full_name="Service User",
-            role=UserRole.ATHLETE,
-        )
-
-        if success and user:
-            print(
-                f"   ✅ Зарегистрирован: {user.username} (id={user.id})"
+        try:
+            user = await service.register_user(
+                email="service@test.com",
+                username="serviceuser",
+                password="123",
+                full_name="Service User",
+                role=UserRole.ATHLETE,
             )
-        else:
-            print(f"   ❌ Ошибка: {error}")
+            print(f"   ✅ Зарегистрирован: {user.username} (id={user.id})")
+        except UserAlreadyExistsError as e:
+            print(f"   ⚠️ Уже есть: {e}")
 
-        # Тест: логин
         print("\n2. Логин...")
-        success, token, error = await service.login_user("serviceuser", "123")
-
-        if success:
+        try:
+            token = await service.login_user("serviceuser", "123")
             print(f"   ✅ Токен получен: {token[:50]}...")
-        else:
-            print(f"   ❌ Ошибка: {error}")
+        except InvalidCredentialsError as e:
+            print(f"   ❌ Ошибка: {e}")
 
-        # Тест: неверный пароль
         print("\n3. Логин с неверным паролем...")
-        success, token, error = await service.login_user("serviceuser", "wrongpassword")
-
-        if not success:
-            print(f"   ✅ Ожидаемая ошибка: {error}")
+        try:
+            await service.login_user("serviceuser", "wrongpassword")
+        except InvalidCredentialsError:
+            print("   ✅ Ожидаемая ошибка: неверные учётные данные")
 
 
 if __name__ == "__main__":

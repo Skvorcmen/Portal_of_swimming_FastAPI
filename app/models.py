@@ -1,7 +1,7 @@
 from sqlalchemy import String, Integer, Boolean, DateTime, Enum
 from sqlalchemy.orm import Mapped, mapped_column
-from datetime import datetime
 from app.database import Base
+from datetime import datetime
 import enum
 
 
@@ -12,6 +12,15 @@ class UserRole(enum.Enum):
     SCHOOL_REP = "school_rep"
     SECRETARY = "secretary"
     ADMIN = "admin"
+
+    def to_db_value(self) -> str:
+        """Преобразует значение для БД (заглавными буквами)"""
+        return self.name  # GUEST, ATHLETE, COACH, ...
+
+    @classmethod
+    def from_db_value(cls, db_value: str):
+        """Преобразует из БД в Python Enum"""
+        return cls[db_value]  # ATHLETE → UserRole.ATHLETE
 
 
 class User(Base):

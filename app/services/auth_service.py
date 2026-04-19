@@ -1,10 +1,9 @@
 from datetime import timedelta
-from typing import Optional, Tuple
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import create_access_token, get_password_hash, verify_password
 from app.core.config import settings
+from app.core.exceptions import UserAlreadyExistsError, InvalidCredentialsError
 from app.models import User, UserRole
 from app.repositories.user_repository import UserRepository
 
@@ -22,13 +21,14 @@ class AuthService:
         password: str,
         full_name: str,
         role: UserRole,
-    ) -> Tuple[bool, Optional[User], str]:
-        """(успех, пользователь или None, текст ошибки)."""
+    ) -> User:
+        """Зарегистрировать нового пользователя. Кидает исключения при ошибках."""
+
         if await self.user_repo.get_by_email(email):
-            return False, None, "Email already registered"
+            raise UserAlreadyExistsError("email", email)
 
         if await self.user_repo.get_by_username(username):
-            return False, None, "Username already taken"
+            raise UserAlreadyExistsError("username", username)
 
         hashed_password = get_password_hash(password)
         user = await self.user_repo.create(
@@ -38,34 +38,26 @@ class AuthService:
             full_name=full_name,
             role=role,
         )
-        return True, user, ""
+        return user
 
-    async def login_user(
-        self, username: str, password: str
-    ) -> Tuple[bool, Optional[str], str]:
+    async def login_user(self, username: str, password: str) -> str:
         """
         Аутентификация пользователя.
-
-        Возвращает:
-            (успех, access_token, сообщение_об_ошибке)
+        Возвращает access_token или кидает исключение.
         """
-        # Ищем пользователя
         user = await self.user_repo.get_by_username(username)
         if not user:
-            return False, None, "Incorrect username or password"
+            raise InvalidCredentialsError()
 
-        # Проверяем пароль
         if not verify_password(password, user.hashed_password):
-            return False, None, "Incorrect username or password"
+            raise InvalidCredentialsError()
 
-        # Создаём токен
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": user.id},
             expires_delta=access_token_expires,
         )
-
-        return True, access_token, ""
+        return access_token
 
     async def get_user_by_id(self, user_id: int):
         """Получить пользователя по ID"""

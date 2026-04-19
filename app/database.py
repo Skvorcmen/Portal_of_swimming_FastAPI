@@ -6,6 +6,9 @@ from app.core.config import settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
+    pool_size=20,  # Максимум соединений в пуле
+    max_overflow=10,  # Дополнительные соединения при пиковой нагрузке
+    pool_pre_ping=True,  # Проверять соединение перед использованием
 )
 
 async_session_maker = async_sessionmaker(
@@ -21,7 +24,4 @@ class Base(DeclarativeBase):
 
 async def get_db():
     async with async_session_maker() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
