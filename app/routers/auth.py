@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta
+from app.auth import ACCESS_TOKEN_EXPIRE_MINUTES
 
 from app.database import get_db
 from app.models import User
@@ -66,7 +67,7 @@ async def login(
         )
 
     # Создаём токен
-    access_token_expires = timedelta(minutes=30)
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.id}, expires_delta=access_token_expires
     )

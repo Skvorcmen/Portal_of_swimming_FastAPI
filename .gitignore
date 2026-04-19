@@ -1,0 +1,34 @@
+# Виртуальное окружение
+venv/
+.venv/
+env/
+.env/
+
+# Кэш Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Логи и БД
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Файлы IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Файлы проекта (секреты)
+.env
+.DS_Store
+
+# Миграции (кэш)
+migrations/__pycache__/
+
+# Загруженные файлы
+uploads/
