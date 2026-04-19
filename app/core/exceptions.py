@@ -26,3 +26,15 @@ class UserNotFoundError(BusinessError):
     """Пользователь не найден"""
 
     pass
+
+
+class InvalidRefreshTokenError(BusinessError):
+    """Невалидный refresh token"""
+
+    pass
+
+
+class ExpiredRefreshTokenError(BusinessError):
+    """Истёкший refresh token"""
+
+    pass

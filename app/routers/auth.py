@@ -3,10 +3,22 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_active_user
-from app.core.exceptions import UserAlreadyExistsError, InvalidCredentialsError
+from app.core.exceptions import (
+    UserAlreadyExistsError,
+    InvalidCredentialsError,
+    InvalidRefreshTokenError,
+    ExpiredRefreshTokenError,
+)
 from app.database import get_db
 from app.models import User
-from app.schemas import Token, UserCreate, UserResponse
+from app.schemas import (
+    Token,
+    UserCreate,
+    UserResponse,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+    LogoutRequest,
+)
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -43,16 +55,54 @@ async def login(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     try:
-        access_token = await auth_service.login_user(
+        access_token, refresh_token = await auth_service.login_user(
             form_data.username, form_data.password
         )
-        return {"access_token": access_token, "token_type": "bearer"}
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+        }
     except InvalidCredentialsError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_access_token(
+    request: RefreshTokenRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    try:
+        access_token = await auth_service.refresh_access_token(request.refresh_token)
+        return {"access_token": access_token, "token_type": "bearer"}
+    except (InvalidRefreshTokenError, ExpiredRefreshTokenError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+@router.post("/logout")
+async def logout(
+    request: LogoutRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    await auth_service.logout(request.refresh_token)
+    return {"message": "Logged out successfully"}
+
+
+@router.post("/logout-all")
+async def logout_all_devices(
+    current_user: User = Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    await auth_service.logout_all_devices(current_user.id)
+    return {"message": "Logged out from all devices"}
 
 
 @router.get("/me", response_model=UserResponse)

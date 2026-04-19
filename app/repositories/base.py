@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from typing import TypeVar, Generic, Type, Optional, List, Dict, Any
+from typing import TypeVar, Generic, Type, Optional, List
 from app.database import Base
 
 # Тип для модели SQLAlchemy

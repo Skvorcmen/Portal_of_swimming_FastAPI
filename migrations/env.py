@@ -12,11 +12,15 @@ load_dotenv()
 sys.path.append(str(Path(__file__).parent.parent))
 
 from app.database import Base
-from app.models import User, UserRole  # noqa: F401 — регистрация моделей в metadata
+from app.models import (
+    User,
+    UserRole,
+    RefreshToken,
+)  # noqa: F401 — регистрация всех моделей
 
 config = context.config
 
-# URL из .env; asyncpg → sync для Alembic. Если нет — берётся sqlalchemy.url из alembic.ini
+# URL из .env; asyncpg → sync для Alembic
 database_url = os.getenv("DATABASE_URL", "").strip()
 if database_url:
     sync_url = database_url.replace("+asyncpg", "")
