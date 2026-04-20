@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto text-center">
+        <h1 class="display-4 mb-4">
+            <i class="fas fa-swimmer text-primary"></i>
+            Добро пожаловать!
+        </h1>
+        <p class="lead">Спортивный портал для управления соревнованиями по плаванию</p>
+
+        <div class="row mt-5">
+            <div class="col-md-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-trophy fa-3x text-warning mb-3"></i>
+                        <h5 class="card-title">Соревнования</h5>
+                        <p class="card-text">Участвуйте в соревнованиях и показывайте лучшие результаты</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-line fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">Рейтинги</h5>
+                        <p class="card-text">Следите за рейтингом и улучшайте свои показатели</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-users fa-3x text-info mb-3"></i>
+                        <h5 class="card-title">Команда</h5>
+                        <p class="card-text">Тренируйтесь вместе с командой и достигайте новых высот</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-5" id="auth-buttons">
+            <a href="/login" class="btn btn-primary btn-lg me-2">Вход</a>
+            <a href="/register" class="btn btn-outline-primary btn-lg">Регистрация</a>
+        </div>
+    </div>
+</div>
+
+<script>
+// Проверяем, есть ли токен (временное решение, позже заменим на HttpOnly cookie)
+const token = localStorage.getItem('access_token');
+if (token) {
+    const authButtons = document.getElementById('auth-buttons');
+    if (authButtons) {
+        authButtons.innerHTML = '<p class="text-success">Вы вошли в систему!</p><a href="/profile" class="btn btn-primary">Личный кабинет</a>';
+    }
+}
+</script>
+{% endblock %}

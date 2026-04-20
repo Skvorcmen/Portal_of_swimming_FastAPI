@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 mx-auto">
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title text-center mb-4">Вход в систему</h3>
+
+                <form id="loginForm" x-data="loginForm()" @submit.prevent="login">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Имя пользователя</label>
+                        <input type="text" class="form-control" id="username" name="username"
+                               x-model="username" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Пароль</label>
+                        <div class="input-group">
+                            <input :type="showPassword ? 'text' : 'password'"
+                                   class="form-control" id="password" name="password"
+                                   x-model="password" required>
+                            <button class="btn btn-outline-secondary" type="button"
+                                    @click="showPassword = !showPassword">
+                                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary" :disabled="loading">
+                            <span x-show="!loading">Войти</span>
+                            <span x-show="loading">Загрузка...</span>
+                        </button>
+                        <a href="/register" class="btn btn-link">Нет аккаунта? Зарегистрироваться</a>
+                    </div>
+
+                    <div x-show="errorMessage" class="alert alert-danger mt-3" x-text="errorMessage"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function loginForm() {
+    return {
+        username: '',
+        password: '',
+        showPassword: false,
+        loading: false,
+        errorMessage: '',
+
+        async login() {
+            this.loading = true;
+            this.errorMessage = '';
+
+            try {
+                const formData = new URLSearchParams();
+                formData.append('username', this.username);
+                formData.append('password', this.password);
+
+                const response = await fetch('/auth/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Сохраняем токены в localStorage
+                    localStorage.setItem('access_token', data.access_token);
+                    localStorage.setItem('refresh_token', data.refresh_token);
+
+                    // Перенаправляем на главную
+                    window.location.href = '/';
+                } else {
+                    this.errorMessage = data.detail || 'Ошибка входа';
+                }
+            } catch (error) {
+                this.errorMessage = 'Ошибка сети';
+            } finally {
+                this.loading = false;
+            }
+        }
+    }
+}
+</script>
+{% endblock %}

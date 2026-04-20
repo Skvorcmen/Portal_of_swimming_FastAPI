@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from app.routers import auth
 from app.core.exceptions import BusinessError
 
@@ -8,6 +10,12 @@ app = FastAPI(
     description="Платформа для управления соревнованиями, заплывами и результатами",
     version="1.0.0",
 )
+
+# Подключаем статические файлы
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# Подключаем шаблоны
+templates = Jinja2Templates(directory="app/templates")
 
 
 # Обработчики исключений
@@ -21,13 +29,28 @@ async def general_error_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
-# Подключаем роутеры API
+# Подключаем API роутеры
 app.include_router(auth.router)
 
 
 @app.get("/")
-def home():
-    return {"message": "Портал по плаванию работает!"}
+async def home(request: Request):
+    return templates.TemplateResponse(request=request, name="index.html")
+
+
+@app.get("/login")
+async def login_page(request: Request):
+    return templates.TemplateResponse(request=request, name="login.html")
+
+
+@app.get("/register")
+async def register_page(request: Request):
+    return templates.TemplateResponse(request=request, name="register.html")
+
+
+@app.get("/profile")
+async def profile_page(request: Request):
+    return templates.TemplateResponse(request=request, name="profile.html")
 
 
 @app.get("/health")
