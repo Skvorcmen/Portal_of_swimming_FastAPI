@@ -360,9 +360,9 @@ class SwimEvent(Base):
     entries: Mapped[list["Entry"]] = relationship(
         "Entry", back_populates="swim_event", cascade="all, delete-orphan"
     )
-    # heats: Mapped[list["Heat"]] = relationship(
-    #    "Heat", back_populates="swim_event", cascade="all, delete-orphan"
-    # )
+    heats: Mapped[list["Heat"]] = relationship(
+        "Heat", back_populates="swim_event", cascade="all, delete-orphan"
+    )
 
 
 class Entry(Base):
@@ -411,3 +411,60 @@ class Entry(Base):
     athlete: Mapped["AthleteProfile"] = relationship(
         "AthleteProfile", back_populates="entries"
     )
+    heat_entry: Mapped[Optional["HeatEntry"]] = relationship(
+        "HeatEntry", back_populates="entry", uselist=False
+    )
+
+
+class Heat(Base):
+    __tablename__ = "heats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    swim_event_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("swim_events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    heat_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    lane_count: Mapped[int] = mapped_column(Integer, default=8)
+    status: Mapped[str] = mapped_column(String(20), default="scheduled")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Связи
+    swim_event: Mapped["SwimEvent"] = relationship("SwimEvent", back_populates="heats")
+    entries: Mapped[list["HeatEntry"]] = relationship(
+        "HeatEntry", back_populates="heat", cascade="all, delete-orphan"
+    )
+
+
+class HeatEntry(Base):
+    __tablename__ = "heat_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    heat_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("heats.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    entry_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("entries.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    lane: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_time: Mapped[float] = mapped_column(Float, nullable=True)
+    place: Mapped[int] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Связи
+    heat: Mapped["Heat"] = relationship("Heat", back_populates="entries")
+    entry: Mapped["Entry"] = relationship("Entry", back_populates="heat_entry")

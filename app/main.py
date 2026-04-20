@@ -8,6 +8,7 @@ from app.routers import competitions
 from app.routers import age_categories
 from app.routers import swim_events
 from app.routers import entries
+from app.routers import heats
 
 app = FastAPI(
     title="Спортивный портал по плаванию",
@@ -43,6 +44,8 @@ app.include_router(age_categories.router)
 app.include_router(swim_events.router)
 
 app.include_router(entries.router)
+
+app.include_router(heats.router)
 
 
 @app.get("/")
