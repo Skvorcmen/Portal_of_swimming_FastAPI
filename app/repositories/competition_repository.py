@@ -41,20 +41,6 @@ class CompetitionRepository(BaseRepository[Competition]):
         return result.scalars().all()
 
     async def get_upcoming(self, skip: int = 0, limit: int = 100) -> List[Competition]:
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc)
-        result = await self.session.execute(
-            select(Competition)
-            .where(Competition.start_date > now)
-            .where(Competition.status != "cancelled")
-            .order_by(Competition.start_date)
-            .offset(skip)
-            .limit(limit)
-        )
-        return result.scalars().all()
-
-    async def get_upcoming(self, skip: int = 0, limit: int = 100) -> List[Competition]:
         """Найти предстоящие соревнования"""
         from datetime import datetime, timezone
 

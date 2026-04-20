@@ -252,15 +252,6 @@ class PersonalBest(Base):
     )
 
 
-# class CompetitionStatus(str, enum.Enum):
-#     DRAFT = "draft"
-#     REGISTRATION_OPEN = "registration_open"
-#     REGISTRATION_CLOSED = "registration_closed"
-#     ONGOING = "ongoing"
-#     COMPLETED = "completed"
-#     CANCELLED = "cancelled"
-
-
 class Competition(Base):
     __tablename__ = "competitions"
 

@@ -21,6 +21,12 @@ from app.models import (
     CoachProfile,
     AthleteProfile,
     PersonalBest,
+    Competition,
+    AgeCategory,
+    SwimEvent,
+    Entry,
+    Heat,
+    HeatEntry,
 )  # noqa: F401
 
 config = context.config
