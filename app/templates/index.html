@@ -47,13 +47,62 @@
 </div>
 
 <script>
-// Проверяем, есть ли токен (временное решение, позже заменим на HttpOnly cookie)
-const token = localStorage.getItem('access_token');
-if (token) {
-    const authButtons = document.getElementById('auth-buttons');
-    if (authButtons) {
-        authButtons.innerHTML = '<p class="text-success">Вы вошли в систему!</p><a href="/profile" class="btn btn-primary">Личный кабинет</a>';
+// Проверяем авторизацию через запрос к /auth/me
+fetch('/auth/me', {
+    credentials: 'include'  // Отправляем cookie
+})
+.then(response => {
+    if (response.ok) {
+        // Пользователь авторизован
+        const authButtons = document.getElementById('auth-buttons');
+        if (authButtons) {
+            authButtons.innerHTML = `
+                <p class="text-success">Вы вошли в систему!</p>
+                <a href="/profile" class="btn btn-primary">Личный кабинет</a>
+                <button onclick="logout()" class="btn btn-danger ms-2">Выйти</button>
+            `;
+        }
     }
+})
+.catch(() => {
+    // Ошибка — пользователь не авторизован, оставляем кнопки входа
+});
+
+function logout() {
+    const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1];
+    fetch('/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'X-CSRF-Token': csrfToken || ''
+        }
+    })
+    .then(() => {
+        window.location.href = '/';
+    })
+    .catch(() => {
+        window.location.href = '/';
+    });
+}
+
+async function getCsrfToken() {
+    const match = document.cookie.match(/csrf_token=([^;]+)/);
+    return match ? match[1] : null;
+}
+
+// Пример отправки POST запроса с CSRF защитой
+async function changePassword(newPassword) {
+    const csrfToken = await getCsrfToken();
+    const response = await fetch('/auth/change-password', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+        },
+        body: JSON.stringify({ password: newPassword }),
+        credentials: 'include'
+    });
+    return response.ok;
 }
 </script>
 {% endblock %}

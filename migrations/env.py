@@ -16,7 +16,12 @@ from app.models import (
     User,
     UserRole,
     RefreshToken,
-)  # noqa: F401 — регистрация всех моделей
+    School,
+    Branch,
+    CoachProfile,
+    AthleteProfile,
+    PersonalBest,
+)  # noqa: F401
 
 config = context.config
 

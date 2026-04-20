@@ -1,7 +1,102 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1>Профиль</h1>
-<p>Страница профиля в разработке</p>
-<a href="/">На главную</a>
+<div class="row">
+    <div class="col-md-6 mx-auto">
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title text-center mb-4">Личный кабинет</h3>
+
+                <div x-data="profile()" x-init="loadProfile()">
+                    <div x-show="loading" class="text-center">Загрузка...</div>
+
+                    <div x-show="!loading && error" class="alert alert-danger" x-text="error"></div>
+
+                    <div x-show="!loading && !error">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">ID</label>
+                            <p class="form-control-plaintext" x-text="user.id"></p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Email</label>
+                            <p class="form-control-plaintext" x-text="user.email"></p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Имя пользователя</label>
+                            <p class="form-control-plaintext" x-text="user.username"></p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Полное имя</label>
+                            <p class="form-control-plaintext" x-text="user.full_name"></p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Роль</label>
+                            <p class="form-control-plaintext" x-text="user.role"></p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Дата регистрации</label>
+                            <p class="form-control-plaintext" x-text="new Date(user.created_at).toLocaleString()"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 mt-3">
+                    <a href="/" class="btn btn-secondary">На главную</a>
+                    <button onclick="logout()" class="btn btn-danger">Выйти</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function profile() {
+    return {
+        user: null,
+        loading: true,
+        error: '',
+
+        async loadProfile() {
+            this.loading = true;
+            try {
+                const response = await fetch('/auth/me', {
+                    credentials: 'include'
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (response.ok) {
+                    this.user = await response.json();
+                } else {
+                    this.error = 'Не удалось загрузить профиль';
+                }
+            } catch (err) {
+                this.error = 'Ошибка сети';
+            } finally {
+                this.loading = false;
+            }
+        }
+    }
+}
+
+function logout() {
+    const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1];
+    fetch('/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'X-CSRF-Token': csrfToken || ''
+        }
+    })
+    .then(() => {
+        window.location.href = '/';
+    })
+    .catch(() => {
+        window.location.href = '/';
+    });
+}
+</script>
 {% endblock %}

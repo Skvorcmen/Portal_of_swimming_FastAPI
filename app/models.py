@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, Boolean, DateTime, Enum, ForeignKey
+from typing import Optional, List
+from sqlalchemy import String, Integer, Boolean, DateTime, Enum, ForeignKey, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -15,7 +16,7 @@ class UserRole(enum.Enum):
 
 
 class User(Base):
-    __tablename__ = "user"  # ← ЭТА СТРОКА КЛЮЧЕВАЯ!
+    __tablename__ = "user"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str] = mapped_column(
@@ -32,9 +33,14 @@ class User(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    # Связь с refresh токенами (добавим позже)
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
+    athlete_profile: Mapped[Optional["AthleteProfile"]] = relationship(
+        "AthleteProfile", back_populates="user", uselist=False
+    )
+    coach_profile: Mapped[Optional["CoachProfile"]] = relationship(
+        "CoachProfile", back_populates="user", uselist=False
     )
 
 
@@ -46,7 +52,7 @@ class RefreshToken(Base):
         String(500), unique=True, nullable=False, index=True
     )
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
@@ -57,3 +63,187 @@ class RefreshToken(Base):
     )
 
     user: Mapped["User"] = relationship("User", back_populates="refresh_tokens")
+
+
+class School(Base):
+    __tablename__ = "schools"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    full_name: Mapped[str] = mapped_column(String(500), nullable=True)
+    city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
+    address: Mapped[str] = mapped_column(String(500), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
+    website: Mapped[str] = mapped_column(String(200), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    branches: Mapped[list["Branch"]] = relationship(
+        "Branch", back_populates="school", cascade="all, delete-orphan"
+    )
+    athletes: Mapped[list["AthleteProfile"]] = relationship(
+        "AthleteProfile", back_populates="school"
+    )
+    coaches: Mapped[list["CoachProfile"]] = relationship(
+        "CoachProfile", back_populates="school"
+    )
+
+
+class Branch(Base):
+    __tablename__ = "branches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    school_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("schools.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    address: Mapped[str] = mapped_column(String(500), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    school: Mapped["School"] = relationship("School", back_populates="branches")
+    athletes: Mapped[list["AthleteProfile"]] = relationship(
+        "AthleteProfile", back_populates="branch"
+    )
+    coaches: Mapped[list["CoachProfile"]] = relationship(
+        "CoachProfile", back_populates="branch"
+    )
+
+
+class CoachProfile(Base):
+    __tablename__ = "coach_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    school_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("schools.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    branch_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("branches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    qualification: Mapped[str] = mapped_column(String(100), nullable=True)
+    experience_years: Mapped[int] = mapped_column(Integer, default=0)
+    specialization: Mapped[str] = mapped_column(String(200), nullable=True)
+    is_head_coach: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="coach_profile")
+    school: Mapped[Optional["School"]] = relationship(
+        "School", back_populates="coaches"
+    )
+    branch: Mapped[Optional["Branch"]] = relationship(
+        "Branch", back_populates="coaches"
+    )
+    athletes: Mapped[list["AthleteProfile"]] = relationship(
+        "AthleteProfile", back_populates="coach"
+    )
+
+
+class AthleteProfile(Base):
+    __tablename__ = "athlete_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    school_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("schools.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    branch_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("branches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    coach_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("coach_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    gender: Mapped[str] = mapped_column(String(10), nullable=True, index=True)
+    rank: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="athlete_profile")
+    school: Mapped[Optional["School"]] = relationship(
+        "School", back_populates="athletes"
+    )
+    branch: Mapped[Optional["Branch"]] = relationship(
+        "Branch", back_populates="athletes"
+    )
+    coach: Mapped[Optional["CoachProfile"]] = relationship(
+        "CoachProfile", back_populates="athletes"
+    )
+    personal_bests: Mapped[list["PersonalBest"]] = relationship(
+        "PersonalBest", back_populates="athlete", cascade="all, delete-orphan"
+    )
+
+
+class PersonalBest(Base):
+    __tablename__ = "personal_bests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    athlete_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("athlete_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    distance: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )  # 50, 100, 200, 400, 800, 1500
+    stroke: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True
+    )  # freestyle, breaststroke, backstroke, butterfly
+    time_seconds: Mapped[float] = mapped_column(Float, nullable=False)
+    set_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    athlete: Mapped["AthleteProfile"] = relationship(
+        "AthleteProfile", back_populates="personal_bests"
+    )

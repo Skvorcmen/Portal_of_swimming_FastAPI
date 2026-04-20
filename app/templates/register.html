@@ -1,7 +1,115 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1>Регистрация</h1>
-<p>Страница регистрации в разработке</p>
-<a href="/">На главную</a>
+<div class="row">
+    <div class="col-md-6 mx-auto">
+        <div class="card">
+            <div class="card-body">
+                <h3 class="card-title text-center mb-4">Регистрация</h3>
+
+                <form x-data="registerForm()" @submit.prevent="register">
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" x-model="email" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Имя пользователя</label>
+                        <input type="text" class="form-control" x-model="username" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Полное имя</label>
+                        <input type="text" class="form-control" x-model="full_name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Пароль</label>
+                        <div class="input-group">
+                            <input :type="showPassword ? 'text' : 'password'" class="form-control" x-model="password" required>
+                            <button class="btn btn-outline-secondary" type="button" @click="showPassword = !showPassword">
+                                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Роль</label>
+                        <select class="form-select" x-model="role">
+                            <option value="athlete">Спортсмен</option>
+                            <option value="coach">Тренер</option>
+                            <option value="school_rep">Представитель школы</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100" :disabled="loading">
+                        <span x-show="!loading">Зарегистрироваться</span>
+                        <span x-show="loading">Загрузка...</span>
+                    </button>
+
+                    <div x-show="errorMessage" class="alert alert-danger mt-3" x-text="errorMessage"></div>
+                    <div x-show="successMessage" class="alert alert-success mt-3" x-text="successMessage"></div>
+                </form>
+
+                <div class="text-center mt-3">
+                    <a href="/login">Уже есть аккаунт? Войти</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function registerForm() {
+    return {
+        email: '',
+        username: '',
+        full_name: '',
+        password: '',
+        role: 'athlete',
+        showPassword: false,
+        loading: false,
+        errorMessage: '',
+        successMessage: '',
+
+        async register() {
+            this.loading = true;
+            this.errorMessage = '';
+            this.successMessage = '';
+
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: this.email,
+                        username: this.username,
+                        full_name: this.full_name,
+                        password: this.password,
+                        role: this.role
+                    }),
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    this.successMessage = 'Регистрация успешна! Перенаправление на вход...';
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 2000);
+                } else {
+                    this.errorMessage = data.detail || 'Ошибка регистрации';
+                }
+            } catch (error) {
+                this.errorMessage = 'Ошибка сети';
+            } finally {
+                this.loading = false;
+            }
+        }
+    }
+}
+</script>
 {% endblock %}

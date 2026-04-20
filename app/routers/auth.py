@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.auth import get_current_active_user
+from app.core.csrf import generate_csrf_token, set_csrf_cookie
+from app.core.csrf import verify_csrf_token
+from app.auth import (
+    get_current_active_user,
+    get_current_user_from_cookie,
+    get_current_user_optional_cookie,
+)
 from app.core.exceptions import (
     UserAlreadyExistsError,
     InvalidCredentialsError,
@@ -58,11 +64,39 @@ async def login(
         access_token, refresh_token = await auth_service.login_user(
             form_data.username, form_data.password
         )
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-        }
+
+        # Создаём ответ с токенами
+        response = JSONResponse(
+            content={
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+            }
+        )
+
+        # Устанавливаем HttpOnly cookie
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=1800,
+        )
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=2592000,
+        )
+
+        # Устанавливаем CSRF токен
+        csrf_token = generate_csrf_token()
+        set_csrf_cookie(response, csrf_token)
+
+        return response
     except InvalidCredentialsError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -89,11 +123,18 @@ async def refresh_access_token(
 
 @router.post("/logout")
 async def logout(
-    request: LogoutRequest,
+    request: Request,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    await auth_service.logout(request.refresh_token)
-    return {"message": "Logged out successfully"}
+    verify_csrf_token(request)
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        await auth_service.logout(refresh_token)
+
+    response = JSONResponse(content={"message": "Logged out successfully"})
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+    return response
 
 
 @router.post("/logout-all")
@@ -106,5 +147,19 @@ async def logout_all_devices(
 
 
 @router.get("/me", response_model=UserResponse)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
+async def read_users_me(current_user: User = Depends(get_current_user_optional_cookie)):
     return current_user
+
+
+@router.post("/change-password")
+async def change_password(
+    request: Request,
+    current_user: User = Depends(get_current_user_from_cookie),
+):
+    # Проверяем CSRF токен
+    from app.core.csrf import verify_csrf_token
+
+    verify_csrf_token(request)
+
+    # TODO: логика смены пароля
+    return {"message": "Password changed (example)"}
