@@ -7,6 +7,7 @@ from app.core.exceptions import BusinessError
 from app.routers import competitions
 from app.routers import age_categories
 from app.routers import swim_events
+from app.routers import entries
 
 app = FastAPI(
     title="Спортивный портал по плаванию",
@@ -40,6 +41,8 @@ app.include_router(competitions.router)
 app.include_router(age_categories.router)
 
 app.include_router(swim_events.router)
+
+app.include_router(entries.router)
 
 
 @app.get("/")

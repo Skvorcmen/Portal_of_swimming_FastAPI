@@ -23,17 +23,15 @@ class CompetitionRepository(BaseRepository[Competition]):
         )
         return result.scalars().all()
 
-    from app.models import CompetitionStatus  # добавь в начало файла
-
     async def get_active(self, skip: int = 0, limit: int = 100) -> List[Competition]:
         result = await self.session.execute(
             select(Competition)
             .where(
                 Competition.status.in_(
                     [
-                        CompetitionStatus.REGISTRATION_OPEN,
-                        CompetitionStatus.REGISTRATION_CLOSED,
-                        CompetitionStatus.ONGOING,
+                        "registration_open",
+                        "registration_closed",
+                        "ongoing",
                     ]
                 )
             )
@@ -49,7 +47,7 @@ class CompetitionRepository(BaseRepository[Competition]):
         result = await self.session.execute(
             select(Competition)
             .where(Competition.start_date > now)
-            .where(Competition.status != CompetitionStatus.CANCELLED)
+            .where(Competition.status != "cancelled")
             .order_by(Competition.start_date)
             .offset(skip)
             .limit(limit)
