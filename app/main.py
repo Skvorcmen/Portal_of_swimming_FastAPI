@@ -4,6 +4,9 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from app.routers import auth
 from app.core.exceptions import BusinessError
+from app.routers import competitions
+from app.routers import age_categories
+from app.routers import swim_events
 
 app = FastAPI(
     title="Спортивный портал по плаванию",
@@ -31,6 +34,12 @@ async def general_error_handler(request: Request, exc: Exception):
 
 # Подключаем API роутеры
 app.include_router(auth.router)
+
+app.include_router(competitions.router)
+
+app.include_router(age_categories.router)
+
+app.include_router(swim_events.router)
 
 
 @app.get("/")

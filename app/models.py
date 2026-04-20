@@ -247,3 +247,116 @@ class PersonalBest(Base):
     athlete: Mapped["AthleteProfile"] = relationship(
         "AthleteProfile", back_populates="personal_bests"
     )
+
+
+class CompetitionStatus(str, enum.Enum):
+    DRAFT = "draft"
+    REGISTRATION_OPEN = "registration_open"
+    REGISTRATION_CLOSED = "registration_closed"
+    ONGOING = "ongoing"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class Competition(Base):
+    __tablename__ = "competitions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(String(1000), nullable=True)
+    start_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    venue: Mapped[str] = mapped_column(String(200), nullable=True)
+    city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
+    status: Mapped[CompetitionStatus] = mapped_column(
+        Enum(CompetitionStatus), default=CompetitionStatus.DRAFT, index=True
+    )
+    max_participants: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_by: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Связи (пока закомментируем, добавим позже)
+    age_categories: Mapped[list["AgeCategory"]] = relationship(
+        "AgeCategory", back_populates="competition", cascade="all, delete-orphan"
+    )
+    swim_events: Mapped[list["SwimEvent"]] = relationship(
+        "SwimEvent", back_populates="competition", cascade="all, delete-orphan"
+    )
+    # entries: Mapped[list["Entry"]] = relationship("Entry", back_populates="competition", cascade="all, delete-orphan")
+    creator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
+
+
+class AgeCategory(Base):
+    __tablename__ = "age_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    competition_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )  # "10-12 лет", "13-15 лет"
+    min_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    gender: Mapped[str] = mapped_column(
+        String(10), nullable=True
+    )  # male, female, mixed
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Связь с соревнованием
+    competition: Mapped["Competition"] = relationship(
+        "Competition", back_populates="age_categories"
+    )
+
+
+class SwimEvent(Base):
+    __tablename__ = "swim_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    competition_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)  # "50m Freestyle"
+    distance: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )  # 50, 100, 200, 400, 800, 1500
+    stroke: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # freestyle, breaststroke, backstroke, butterfly, medley
+    gender: Mapped[str] = mapped_column(
+        String(10), nullable=True
+    )  # male, female, mixed
+    is_relay: Mapped[bool] = mapped_column(Boolean, default=False)
+    order: Mapped[int] = mapped_column(Integer, default=0)  # порядок проведения
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Связи
+    competition: Mapped["Competition"] = relationship(
+        "Competition", back_populates="swim_events"
+    )
+    # entries: Mapped[list["Entry"]] = relationship(
+    #    "Entry", back_populates="swim_event", cascade="all, delete-orphan"
+    # )
+    # heats: Mapped[list["Heat"]] = relationship(
+    #    "Heat", back_populates="swim_event", cascade="all, delete-orphan"
+    # )
