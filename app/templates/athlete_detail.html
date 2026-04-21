@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                {% if athlete.photo_url %}
+                <img src="{{ athlete.photo_url }}" class="rounded-circle mb-3" style="width: 150px; height: 150px; object-fit: cover;">
+                {% else %}
+                <div class="rounded-circle bg-secondary mx-auto d-flex align-items-center justify-content-center mb-3" style="width: 150px; height: 150px;">
+                    <i class="fas fa-user fa-5x text-white"></i>
+                </div>
+                {% endif %}
+                <h3>{{ athlete.user.full_name }}</h3>
+                <p class="text-muted">
+                    <i class="fas fa-tag"></i> Спортсмен
+                </p>
+                
+                {% if school %}
+                <p class="mt-3">
+                    <i class="fas fa-school"></i> 
+                    <a href="/schools/{{ school.id }}/page">{{ school.name }}</a>
+                </p>
+                {% endif %}
+                
+                {% if coach %}
+                <p>
+                    <i class="fas fa-chalkboard-user"></i> 
+                    <a href="/coaches/{{ coach.id }}/page">Тренер: {{ coach.user.full_name }}</a>
+                </p>
+                <p><small class="text-muted">Стаж тренера: {{ coach.experience_years }} лет</small></p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h4 class="card-title">О спортсмене</h4>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <p><strong><i class="fas fa-calendar"></i> Дата рождения:</strong><br>
+                        {% if athlete.birth_date %}
+                        {{ athlete.birth_date.strftime('%d.%m.%Y') }} ({{ (now.year - athlete.birth_date.year) }} лет)
+                        {% else %}
+                        Не указана
+                        {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong><i class="fas fa-venus-mars"></i> Пол:</strong><br>
+                        {{ athlete.gender or 'Не указан' }}
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <p><strong><i class="fas fa-medal"></i> Разряд:</strong><br>
+                    {{ athlete.rank or 'Не указан' }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title">Личные рекорды</h4>
+                
+                {% if personal_bests %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Дистанция</th>
+                                <th>Стиль</th>
+                                <th>Время (сек)</th>
+                                <th>Дата установки</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for key, pb in personal_bests.items() %}
+                            <tr>
+                                <td>{{ pb.distance }} м</td>
+                                <td>{{ pb.stroke }}</td>
+                                <td><strong>{{ pb.time_seconds }}</strong></td>
+                                <td>{{ pb.set_at.strftime('%d.%m.%Y') if pb.set_at else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">Личные рекорды не добавлены</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="text-center mt-3">
+            <a href="javascript:history.back()" class="btn btn-secondary">← Назад</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

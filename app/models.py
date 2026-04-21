@@ -71,11 +71,15 @@ class School(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     full_name: Mapped[str] = mapped_column(String(500), nullable=True)
+    description: Mapped[str] = mapped_column(String(2000), nullable=True)  # ← добавить
+    logo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # ← добавить
+    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)  # ← добавить
     city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
     address: Mapped[str] = mapped_column(String(500), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
     email: Mapped[str] = mapped_column(String(100), nullable=True)
     website: Mapped[str] = mapped_column(String(200), nullable=True)
+    founded_year: Mapped[int] = mapped_column(Integer, nullable=True)  # ← добавить
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -143,10 +147,17 @@ class CoachProfile(Base):
         index=True,
     )
 
+    photo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # ← добавить
+    bio: Mapped[str] = mapped_column(String(1000), nullable=True)  # ← добавить
+    birth_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # ← добавить
+
     qualification: Mapped[str] = mapped_column(String(100), nullable=True)
     experience_years: Mapped[int] = mapped_column(Integer, default=0)
     specialization: Mapped[str] = mapped_column(String(200), nullable=True)
     is_head_coach: Mapped[bool] = mapped_column(Boolean, default=False)
+    achievements: Mapped[str] = mapped_column(String(1000), nullable=True)  # ← добавить
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -534,3 +545,24 @@ class Article(Base):
 
     # Связи
     author: Mapped[Optional["User"]] = relationship("User", backref="articles")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token: Mapped[str] = mapped_column(
+        String(100), unique=True, nullable=False, index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped["User"] = relationship("User", backref="password_reset_tokens")

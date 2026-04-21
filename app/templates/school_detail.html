@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Обложка -->
+        {% if school.cover_url %}
+        <div class="mb-4" style="height: 300px; overflow: hidden; border-radius: 10px;">
+            <img src="{{ school.cover_url }}" class="w-100" style="object-fit: cover; height: 300px;" alt="{{ school.name }}">
+        </div>
+        {% else %}
+        <div class="mb-4 bg-primary d-flex align-items-center justify-content-center" style="height: 200px; border-radius: 10px;">
+            <i class="fas fa-school fa-5x text-white"></i>
+        </div>
+        {% endif %}
+        
+        <!-- Шапка -->
+        <div class="d-flex align-items-start mb-4">
+            {% if school.logo_url %}
+            <img src="{{ school.logo_url }}" class="rounded-circle me-4" style="width: 100px; height: 100px; object-fit: cover; margin-top: -50px; border: 3px solid white;">
+            {% else %}
+            <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center me-4" style="width: 100px; height: 100px; margin-top: -50px; border: 3px solid white;">
+                <i class="fas fa-school fa-3x text-white"></i>
+            </div>
+            {% endif %}
+            <div class="flex-grow-1">
+                <h1>{{ school.name }}</h1>
+                <p class="text-muted">{{ school.full_name or school.name }}</p>
+            </div>
+        </div>
+        
+        <!-- Информация -->
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">О школе</h5>
+                        <p>{{ school.description or 'Нет описания' }}</p>
+                        
+                        <hr>
+                        <h6>Контакты</h6>
+                        <p>
+                            <i class="fas fa-map-marker-alt"></i> {{ school.address }}<br>
+                            <i class="fas fa-phone"></i> {{ school.phone or 'Не указан' }}<br>
+                            <i class="fas fa-envelope"></i> {{ school.email or 'Не указан' }}<br>
+                            <i class="fas fa-globe"></i> <a href="{{ school.website }}" target="_blank">{{ school.website or 'Не указан' }}</a>
+                        </p>
+                        
+                        {% if school.founded_year %}
+                        <p><i class="fas fa-calendar"></i> Основана: {{ school.founded_year }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Тренерский состав</h5>
+                        {% if coaches %}
+                        <div class="list-group">
+                            {% for coach in coaches %}
+                            <a href="/coaches/{{ coach.id }}/page" class="list-group-item list-group-item-action">
+                                <div class="d-flex align-items-center">
+                                    {% if coach.photo_url %}
+                                    <img src="{{ coach.photo_url }}" class="rounded-circle me-3" style="width: 40px; height: 40px; object-fit: cover;">
+                                    {% else %}
+                                    <div class="rounded-circle bg-secondary me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                        <i class="fas fa-user text-white"></i>
+                                    </div>
+                                    {% endif %}
+                                    <div>
+                                        <strong>{{ coach.user.full_name }}</strong>
+                                        {% if coach.is_head_coach %}
+                                        <span class="badge bg-warning ms-2">Главный тренер</span>
+                                        {% endif %}
+                                        <br>
+                                        <small class="text-muted">Стаж: {{ coach.experience_years }} лет</small>
+                                    </div>
+                                </div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted">Нет тренеров</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-3">
+            <a href="/schools/page" class="btn btn-secondary">← Назад к школам</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

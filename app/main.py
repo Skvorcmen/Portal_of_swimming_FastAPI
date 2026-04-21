@@ -11,6 +11,13 @@ from app.routers import entries
 from app.routers import heats
 from app.routers import chat
 from app.routers import news, articles
+from app.routers import schools, coaches
+from app.routers import coach_profiles
+from app.routers import athletes
+from app.core.rate_limit import limiter, setup_rate_limit
+from app.core.blocklist import is_ip_blocked
+from fastapi import Request, HTTPException
+from app.core.rate_limit import limiter, setup_rate_limit
 
 app = FastAPI(
     title="Спортивный портал по плаванию",
@@ -55,6 +62,21 @@ app.include_router(news.router)
 
 app.include_router(articles.router)
 
+app.include_router(schools.router)
+
+app.include_router(coaches.router)
+
+app.include_router(coach_profiles.router)
+
+app.include_router(athletes.router)
+
+# После создания app
+setup_rate_limit(app)
+
+
+# После создания app
+setup_rate_limit(app)
+
 
 @app.get("/")
 async def home(request: Request):
@@ -90,3 +112,14 @@ def health_check():
 @app.get("/test")
 async def test_page(request: Request):
     return templates.TemplateResponse("test.html", {"request": request})
+
+
+@app.middleware("http")
+async def blocklist_middleware(request: Request, call_next):
+    ip = request.client.host
+    if is_ip_blocked(ip):
+        return JSONResponse(
+            status_code=429, content={"detail": "IP blocked for 15 minutes"}
+        )
+    response = await call_next(request)
+    return response

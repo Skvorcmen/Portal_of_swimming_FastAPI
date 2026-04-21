@@ -26,6 +26,25 @@ from app.schemas import (
     LogoutRequest,
 )
 from app.services.auth_service import AuthService
+from app.core.rate_limit import limiter
+
+# ===== СХЕМЫ ДЛЯ СБРОСА ПАРОЛЯ =====
+from pydantic import BaseModel, EmailStr
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+
+class PasswordChangeRequest(BaseModel):
+    old_password: str
+    new_password: str
+
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -35,7 +54,9 @@ def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
 
 
 @router.post("/register", response_model=UserResponse)
+@limiter.limit("5/hour")
 async def register(
+    request: Request,
     user_data: UserCreate,
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -56,7 +77,9 @@ async def register(
 
 
 @router.post("/token", response_model=Token)
+@limiter.limit("10/minute")
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -65,7 +88,6 @@ async def login(
             form_data.username, form_data.password
         )
 
-        # Создаём ответ с токенами
         response = JSONResponse(
             content={
                 "access_token": access_token,
@@ -74,7 +96,6 @@ async def login(
             }
         )
 
-        # Устанавливаем HttpOnly cookie
         response.set_cookie(
             key="access_token",
             value=access_token,
@@ -92,7 +113,6 @@ async def login(
             max_age=2592000,
         )
 
-        # Устанавливаем CSRF токен
         csrf_token = generate_csrf_token()
         set_csrf_cookie(response, csrf_token)
 
@@ -106,12 +126,16 @@ async def login(
 
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
+@limiter.limit("20/minute")
 async def refresh_access_token(
-    request: RefreshTokenRequest,
+    request: Request,
+    refresh_data: RefreshTokenRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
     try:
-        access_token = await auth_service.refresh_access_token(request.refresh_token)
+        access_token = await auth_service.refresh_access_token(
+            refresh_data.refresh_token
+        )
         return {"access_token": access_token, "token_type": "bearer"}
     except (InvalidRefreshTokenError, ExpiredRefreshTokenError) as e:
         raise HTTPException(
@@ -122,6 +146,7 @@ async def refresh_access_token(
 
 
 @router.post("/logout")
+@limiter.limit("20/minute")
 async def logout(
     request: Request,
     auth_service: AuthService = Depends(get_auth_service),
@@ -139,6 +164,7 @@ async def logout(
 
 @router.post("/logout-all")
 async def logout_all_devices(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -151,15 +177,56 @@ async def read_users_me(current_user: User = Depends(get_current_user_optional_c
     return current_user
 
 
+# ===== ЭНДПОИНТЫ =====
+@router.post("/forgot-password")
+@limiter.limit("3/hour")
+async def forgot_password(
+    request: Request,
+    data: PasswordResetRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Запрос на сброс пароля"""
+    token = await auth_service.request_password_reset(data.email)
+    return {"message": "If email exists, reset link sent", "token": token}
+
+
+@router.post("/reset-password")
+@limiter.limit("3/hour")
+async def reset_password(
+    request: Request,
+    data: PasswordResetConfirm,
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Подтверждение сброса пароля"""
+    success = await auth_service.reset_password(data.token, data.new_password)
+    if not success:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    return {"message": "Password reset successfully"}
+
+
 @router.post("/change-password")
 async def change_password(
     request: Request,
-    current_user: User = Depends(get_current_user_from_cookie),
+    data: PasswordChangeRequest,
+    current_user: User = Depends(
+        get_current_user_optional_cookie
+    ),  # ← Поддерживает и cookie, и Bearer
+    auth_service: AuthService = Depends(get_auth_service),
 ):
-    # Проверяем CSRF токен
-    from app.core.csrf import verify_csrf_token
+    # Проверяем CSRF только для cookie-аутентификации
+    if request.cookies.get("access_token"):
+        from app.core.csrf import verify_csrf_token
 
-    verify_csrf_token(request)
+        verify_csrf_token(request)
 
-    # TODO: логика смены пароля
-    return {"message": "Password changed (example)"}
+    success = await auth_service.change_password(
+        current_user.id, data.old_password, data.new_password
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail="Incorrect old password")
+
+    # После смены пароля удаляем старые токены
+    response = JSONResponse(content={"message": "Password changed successfully"})
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+    return response

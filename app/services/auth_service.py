@@ -12,6 +12,7 @@ from app.core.exceptions import (
 from app.models import UserRole
 from app.repositories.user_repository import UserRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
+from app.repositories.password_reset_repository import PasswordResetRepository
 
 
 class AuthService:
@@ -94,3 +95,53 @@ class AuthService:
     async def logout_all_devices(self, user_id: int) -> None:
         """Отозвать все refresh токены пользователя"""
         await self.refresh_token_repo.revoke_all_user_tokens(user_id)
+
+    async def request_password_reset(self, email: str) -> str:
+        """Создаёт токен для сброса пароля. Возвращает токен."""
+        user = await self.user_repo.get_by_email(email)
+        if not user:
+            return "reset_token_placeholder"
+        
+        from app.repositories.password_reset_repository import PasswordResetRepository
+        self.password_reset_repo = PasswordResetRepository(self.user_repo.session)
+        token = await self.password_reset_repo.create_token(user.id)
+        return token.token
+
+    async def reset_password(self, token: str, new_password: str) -> bool:
+        """Сброс пароля по токену."""
+        from app.repositories.password_reset_repository import PasswordResetRepository
+        self.password_reset_repo = PasswordResetRepository(self.user_repo.session)
+        
+        reset_token = await self.password_reset_repo.get_valid_token(token)
+        if not reset_token:
+            return False
+        
+        user = await self.user_repo.get_by_id(reset_token.user_id)
+        if not user:
+            return False
+        
+        from app.auth import get_password_hash
+        hashed_password = get_password_hash(new_password)
+        await self.user_repo.update(user.id, hashed_password=hashed_password)
+        await self.password_reset_repo.mark_as_used(reset_token.id)
+        
+        # Отзываем все refresh токены пользователя
+        await self.refresh_token_repo.revoke_all_user_tokens(user.id)
+        
+        return True
+
+    async def change_password(self, user_id: int, old_password: str, new_password: str) -> bool:
+        """Смена пароля авторизованным пользователем."""
+        from app.auth import verify_password, get_password_hash
+        
+        user = await self.user_repo.get_by_id(user_id)
+        if not user or not verify_password(old_password, user.hashed_password):
+            return False
+        
+        hashed_password = get_password_hash(new_password)
+        await self.user_repo.update(user_id, hashed_password=hashed_password)
+        
+        # Отзываем все refresh токены
+        await self.refresh_token_repo.revoke_all_user_tokens(user_id)
+        
+        return True

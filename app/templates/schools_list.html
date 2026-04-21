@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="text-center mb-4">Школы плавания</h1>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <input type="text" class="form-control" id="nameSearch" placeholder="Название школы" oninput="searchSchools()">
+                    </div>
+                    <div class="col-md-5">
+                        <input type="text" class="form-control" id="citySearch" placeholder="Город" oninput="searchSchools()">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-secondary w-100" onclick="resetFilters()">Сбросить</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="schoolsList">
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function searchSchools() {
+    const name = encodeURIComponent(document.getElementById('nameSearch').value);
+    const city = encodeURIComponent(document.getElementById('citySearch').value);
+    
+    fetch(`/schools/search?name=${name}&city=${city}`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('schoolsList').innerHTML = html;
+        });
+}
+
+function resetFilters() {
+    document.getElementById('nameSearch').value = '';
+    document.getElementById('citySearch').value = '';
+    searchSchools();
+}
+
+document.addEventListener('DOMContentLoaded', searchSchools);
+</script>
+{% endblock %}

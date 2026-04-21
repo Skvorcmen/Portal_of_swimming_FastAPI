@@ -1,0 +1,56 @@
+<div class="row">
+    {% for school in schools %}
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            {% if school.logo_url %}
+            <img src="{{ school.logo_url }}" class="card-img-top" alt="{{ school.name }}" style="height: 150px; object-fit: cover;">
+            {% else %}
+            <div class="card-img-top bg-primary d-flex align-items-center justify-content-center" style="height: 150px;">
+                <i class="fas fa-school fa-4x text-white"></i>
+            </div>
+            {% endif %}
+            <div class="card-body">
+                <h5 class="card-title">{{ school.name }}</h5>
+                <p class="card-text text-muted">
+                    <i class="fas fa-map-marker-alt"></i> {{ school.city }}
+                </p>
+                <p class="card-text">{{ school.description[:100] if school.description else 'Нет описания' }}...</p>
+                {% if school.founded_year %}
+                <p class="card-text"><small class="text-muted">Основана: {{ school.founded_year }}</small></p>
+                {% endif %}
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="/schools/{{ school.id }}/page" class="btn btn-primary w-100">Подробнее</a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-info">Школ не найдено</div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if pages > 1 %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% for p in range(1, pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="#" onclick="loadPage({{ p }}); return false;">{{ p }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</nav>
+
+<script>
+function loadPage(page) {
+    const name = encodeURIComponent(document.getElementById('nameSearch').value);
+    const city = encodeURIComponent(document.getElementById('citySearch').value);
+    fetch(`/schools/search?name=${name}&city=${city}&page=${page}`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('schoolsList').innerHTML = html;
+        });
+}
+</script>
+{% endif %}
