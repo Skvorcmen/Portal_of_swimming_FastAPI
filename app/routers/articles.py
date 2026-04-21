@@ -8,6 +8,10 @@ from app.database import get_db
 from app.services.article_service import ArticleService
 from app.models import User, UserRole
 from app.core.dependencies import require_role
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
+
+templates = Jinja2Templates(directory="app/templates")
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -129,3 +133,29 @@ async def delete_article(
     if not deleted:
         raise HTTPException(status_code=404, detail="Article not found")
     return {"message": "Article deleted successfully"}
+
+
+@router.get("/page")
+async def articles_page(request: Request):
+    return templates.TemplateResponse("articles_list.html", {"request": request})
+
+
+@router.get("/search")
+async def search_articles(
+    request: Request,
+    q: str = "",
+    category: str = "",
+    page: int = 1,
+    service: ArticleService = Depends(get_article_service),
+):
+    result = await service.search_articles(q, category, page)
+    return templates.TemplateResponse(
+        "partials/article_items.html",
+        {
+            "request": request,
+            "articles": result["items"],
+            "page": page,
+            "total": result["total"],
+            "pages": result["pages"],
+        },
+    )

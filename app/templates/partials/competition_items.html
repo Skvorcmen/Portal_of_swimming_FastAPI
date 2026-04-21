@@ -1,0 +1,13 @@
+{% for comp in competitions %}
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">{{ comp.name }}</h5>
+        <p class="card-text">{{ comp.city }}, {{ comp.venue or 'Место не указано' }}</p>
+        <p><strong>Дата:</strong> {{ comp.start_date.strftime('%d.%m.%Y') }} - {{ comp.end_date.strftime('%d.%m.%Y') }}</p>
+        <span class="badge bg-secondary">{{ comp.status }}</span>
+        <a href="/competitions/{{ comp.id }}/page" class="btn btn-sm btn-primary float-end">Подробнее</a>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">Соревнований не найдено</div>
+{% endfor %}

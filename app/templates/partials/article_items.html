@@ -1,0 +1,13 @@
+{% for article in articles %}
+<div class="card mb-3">
+    <div class="card-body">
+        <span class="badge bg-primary mb-2">{{ article.category }}</span>
+        <h5 class="card-title">{{ article.title }}</h5>
+        <p class="card-text">{{ article.summary or article.content[:150] }}...</p>
+        <small class="text-muted">Просмотров: {{ article.views }}</small>
+        <a href="/articles/{{ article.id }}" class="btn btn-sm btn-primary float-end">Читать</a>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">Статей не найдено</div>
+{% endfor %}

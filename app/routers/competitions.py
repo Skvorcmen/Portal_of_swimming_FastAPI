@@ -10,8 +10,11 @@ from app.auth import get_current_active_user
 from app.models import User
 from app.core.dependencies import require_role
 from app.models import UserRole
-from fastapi import Request
 from fastapi.templating import Jinja2Templates
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+
+templates = Jinja2Templates(directory="app/templates")
 
 router = APIRouter(prefix="/competitions", tags=["competitions"])
 
@@ -61,6 +64,55 @@ class CompetitionResponse(BaseModel):
         from_attributes = True
 
 
+@router.get("/page")
+async def competitions_page(
+    request: Request,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    competitions = await service.get_all_competitions()
+    return templates.TemplateResponse(
+        "competitions_list.html", {"request": request, "competitions": competitions}
+    )
+
+
+@router.get("/search")
+async def search_competitions(
+    request: Request,
+    name: str = "",
+    city: str = "",
+    status: str = "",
+    page: int = 1,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    result = await service.search_competitions(name, city, status, page)
+    return templates.TemplateResponse(
+        "partials/competition_items.html",
+        {
+            "request": request,
+            "competitions": result["items"],
+            "page": page,
+            "total": result["total"],
+            "pages": result["pages"],
+        },
+    )
+
+
+@router.get("/active", response_model=List[CompetitionResponse])
+async def get_active_competitions(
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Получить список активных соревнований"""
+    return await service.get_active_competitions()
+
+
+@router.get("/upcoming", response_model=List[CompetitionResponse])
+async def get_upcoming_competitions(
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Получить список предстоящих соревнований"""
+    return await service.get_upcoming_competitions()
+
+
 @router.post("/", response_model=CompetitionResponse)
 async def create_competition(
     competition_data: CompetitionCreate,
@@ -90,22 +142,6 @@ async def get_all_competitions(
 ):
     """Получить список всех соревнований"""
     return await service.get_all_competitions(skip, limit)
-
-
-@router.get("/active", response_model=List[CompetitionResponse])
-async def get_active_competitions(
-    service: CompetitionService = Depends(get_competition_service),
-):
-    """Получить список активных соревнований"""
-    return await service.get_active_competitions()
-
-
-@router.get("/upcoming", response_model=List[CompetitionResponse])
-async def get_upcoming_competitions(
-    service: CompetitionService = Depends(get_competition_service),
-):
-    """Получить список предстоящих соревнований"""
-    return await service.get_upcoming_competitions()
 
 
 @router.get("/{competition_id}", response_model=CompetitionResponse)
@@ -152,9 +188,6 @@ async def delete_competition(
     if not deleted:
         raise HTTPException(status_code=404, detail="Competition not found")
     return {"message": "Competition deleted successfully"}
-
-
-templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/{competition_id}/page")

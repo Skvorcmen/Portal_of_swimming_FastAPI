@@ -29,3 +29,8 @@ class NewsService:
 
     async def delete_news(self, news_id: int) -> bool:
         return await self.repo.delete(news_id)
+
+    async def search_news(
+        self, query: str = "", sort: str = "newest", page: int = 1
+    ) -> dict:
+        return await self.repo.search(query, sort, page)

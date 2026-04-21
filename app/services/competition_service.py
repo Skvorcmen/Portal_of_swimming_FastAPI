@@ -63,3 +63,8 @@ class CompetitionService:
     async def get_upcoming_competitions(self) -> List[Competition]:
         """Получить предстоящие соревнования"""
         return await self.repo.get_upcoming()
+
+    async def search_competitions(
+        self, name: str = "", city: str = "", status: str = "", page: int = 1
+    ) -> dict:
+        return await self.repo.search(name, city, status, page)

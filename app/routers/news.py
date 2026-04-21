@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from pydantic import BaseModel
@@ -8,9 +10,9 @@ from app.database import get_db
 from app.services.news_service import NewsService
 from app.models import User, UserRole
 from app.core.dependencies import require_role
-from app.auth import get_current_active_user
 
 router = APIRouter(prefix="/news", tags=["news"])
+templates = Jinja2Templates(directory="app/templates")
 
 
 def get_news_service(db: AsyncSession = Depends(get_db)) -> NewsService:
@@ -38,6 +40,39 @@ class NewsResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+@router.get("/test-page")
+async def test_page(request: Request):
+    return HTMLResponse("<h1>News page works!</h1>")
+
+
+@router.get("/page")
+async def news_page(request: Request):
+    return templates.TemplateResponse("news_list.html", {"request": request})
+
+
+@router.get("/search")
+async def search_news(
+    request: Request,
+    q: str = "",
+    sort: str = "newest",
+    page: int = 1,
+    service: NewsService = Depends(get_news_service),
+):
+    result = await service.search_news(q, sort, page)
+    return templates.TemplateResponse(
+        "partials/news_items.html",
+        {
+            "request": request,
+            "news_list": result["items"],
+            "q": q,
+            "page": page,
+            "sort": sort,
+            "total": result["total"],
+            "pages": result["pages"],
+        },
+    )
 
 
 @router.post("/", response_model=NewsResponse)

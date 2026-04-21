@@ -48,3 +48,8 @@ class ArticleService:
 
     async def delete_article(self, article_id: int) -> bool:
         return await self.repo.delete(article_id)
+
+    async def search_articles(
+        self, query: str = "", category: str = "", page: int = 1
+    ) -> dict:
+        return await self.repo.search(query, category, page)

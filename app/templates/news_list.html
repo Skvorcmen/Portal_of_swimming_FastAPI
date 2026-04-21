@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <h1 class="text-center mb-4">Новости плавания</h1>
+        
+        <!-- Поиск -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="input-group">
+                    <input type="text" 
+                           class="form-control" 
+                           id="searchInput" 
+                           placeholder="Поиск новостей..."
+                           value="{{ q or '' }}">
+                    <button class="btn btn-primary" 
+                            hx-get="/news/search"
+                            hx-include="#searchInput"
+                            hx-target="#newsList">
+                        <i class="fas fa-search"></i> Поиск
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Список новостей -->
+        <div id="newsList" hx-get="/news/search" hx-trigger="load" hx-target="#newsList">
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
