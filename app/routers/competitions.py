@@ -13,6 +13,7 @@ from app.models import UserRole
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 from fastapi.responses import HTMLResponse
+from urllib.parse import unquote
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -84,6 +85,11 @@ async def search_competitions(
     page: int = 1,
     service: CompetitionService = Depends(get_competition_service),
 ):
+    # Декодируем URL-encoded строки
+    name = unquote(name)
+    city = unquote(city)
+    status = unquote(status)
+
     result = await service.search_competitions(name, city, status, page)
     return templates.TemplateResponse(
         "partials/competition_items.html",

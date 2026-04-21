@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h1>{{ competition.name }}</h1>
+                <p class="text-muted">{{ competition.description or 'Нет описания' }}</p>
+                <hr>
+                <p><strong>📅 Дата начала:</strong> {{ competition.start_date }}</p>
+                <p><strong>📅 Дата окончания:</strong> {{ competition.end_date }}</p>
+                <p><strong>📍 Место:</strong> {{ competition.venue or 'Не указано' }}, {{ competition.city or 'Не указан' }}</p>
+                <p><strong>📊 Статус:</strong> <span class="badge bg-secondary">{{ competition.status }}</span></p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div x-data="chatComponent('competition_{{ competition.id }}')" x-init="initWebSocket()" class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-comments"></i> Чат соревнования
+            </div>
+            <div class="card-body" style="height: 300px; overflow-y: auto;" x-ref="messagesContainer">
+                <template x-for="(msg, idx) in messages" :key="idx">
+                    <div class="mb-2">
+                        <strong x-text="msg.user"></strong>:
+                        <span x-text="msg.message"></span>
+                        <small class="text-muted ms-2" x-text="msg.created_at ? new Date(msg.created_at).toLocaleTimeString() : ''"></small>
+                    </div>
+                </template>
+                <div x-show="messages.length === 0" class="text-muted text-center">
+                    Нет сообщений. Будьте первым!
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="input-group">
+                    <input type="text" class="form-control" x-model="newMessage" @keyup.enter="sendMessage()" placeholder="Введите сообщение...">
+                    <button class="btn btn-primary" @click="sendMessage()" :disabled="!newMessage.trim()">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function chatComponent(room) {
+    return {
+        room: room,
+        messages: [],
+        newMessage: '',
+        ws: null,
+
+        initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/chat/${this.room}`;
+            this.ws = new WebSocket(wsUrl);
+
+            this.ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'message' || data.type === 'history') {
+                    this.messages.push(data);
+                    this.$nextTick(() => {
+                        const container = this.$refs.messagesContainer;
+                        if (container) container.scrollTop = container.scrollHeight;
+                    });
+                }
+            };
+
+            this.ws.onclose = () => {
+                console.log('WebSocket disconnected, reconnecting...');
+                setTimeout(() => this.initWebSocket(), 3000);
+            };
+        },
+
+        sendMessage() {
+            if (this.newMessage.trim() && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ message: this.newMessage.trim() }));
+                this.newMessage = '';
+            }
+        }
+    }
+}
+</script>
+{% endblock %}
