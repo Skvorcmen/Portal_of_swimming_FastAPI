@@ -12,47 +12,22 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
-            <a class="navbar-brand" href="/">
-                <i class="fas fa-swimmer"></i> Плавательный портал
-            </a>
+            <a class="navbar-brand" href="/"><i class="fas fa-swimmer"></i> Плавательный портал</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Главная</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/live">
-                            <i class="fas fa-chart-line"></i> Live
-                        </a>
-                    </li>
-                    {% if not user %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/login">Вход</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/register">Регистрация</a>
-                    </li>
-                    {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/profile">
-                            <i class="fas fa-user"></i> {{ user.full_name }}
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/logout">Выход</a>
-                    </li>
-                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="/">Главная</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/live"><i class="fas fa-chart-line"></i> Live</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/login">Вход</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">Регистрация</a></li>
                 </ul>
             </div>
         </div>
     </nav>
     <main class="container mt-4">
-        {% block content %}
-        <p>Базовый шаблон. Если вы видите этот текст, то контент не переопределён.</p>
-        {% endblock %}
+        {% block content %}{% endblock %}
     </main>
 </body>
 </html>

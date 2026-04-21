@@ -10,6 +10,8 @@ from app.auth import get_current_active_user
 from app.models import User
 from app.core.dependencies import require_role
 from app.models import UserRole
+from fastapi import Request
+from fastapi.templating import Jinja2Templates
 
 router = APIRouter(prefix="/competitions", tags=["competitions"])
 
@@ -150,3 +152,20 @@ async def delete_competition(
     if not deleted:
         raise HTTPException(status_code=404, detail="Competition not found")
     return {"message": "Competition deleted successfully"}
+
+
+templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/{competition_id}/page")
+async def competition_detail_page(
+    competition_id: int,
+    request: Request,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    competition = await service.get_competition(competition_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return templates.TemplateResponse(
+        "competition_detail.html", {"request": request, "competition": competition}
+    )

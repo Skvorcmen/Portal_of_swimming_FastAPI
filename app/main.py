@@ -9,6 +9,8 @@ from app.routers import age_categories
 from app.routers import swim_events
 from app.routers import entries
 from app.routers import heats
+from app.routers import chat
+from app.routers import news, articles
 
 app = FastAPI(
     title="Спортивный портал по плаванию",
@@ -47,6 +49,12 @@ app.include_router(entries.router)
 
 app.include_router(heats.router)
 
+app.include_router(chat.router)
+
+app.include_router(news.router)
+
+app.include_router(articles.router)
+
 
 @app.get("/")
 async def home(request: Request):
@@ -77,3 +85,8 @@ async def live_page(request: Request):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/test")
+async def test_page(request: Request):
+    return templates.TemplateResponse("test.html", {"request": request})

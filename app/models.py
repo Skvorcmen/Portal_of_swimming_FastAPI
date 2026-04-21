@@ -459,3 +459,78 @@ class HeatEntry(Base):
     # Связи
     heat: Mapped["Heat"] = relationship("Heat", back_populates="entries")
     entry: Mapped["Entry"] = relationship("Entry", back_populates="heat_entry")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    room: Mapped[str] = mapped_column(
+        String(100), nullable=False, index=True
+    )  # competition_1 или support
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    message: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped["User"] = relationship("User", backref="chat_messages")
+
+
+class News(Base):
+    __tablename__ = "news"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(String(5000), nullable=False)
+    author_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Связи
+    author: Mapped[Optional["User"]] = relationship("User", backref="news")
+
+
+class Article(Base):
+    __tablename__ = "articles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(String(10000), nullable=False)
+    summary: Mapped[str] = mapped_column(String(500), nullable=True)
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )  # technique, nutrition, rules, etc.
+    author_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Связи
+    author: Mapped[Optional["User"]] = relationship("User", backref="articles")
