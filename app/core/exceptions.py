@@ -38,3 +38,15 @@ class ExpiredRefreshTokenError(BusinessError):
     """Истёкший refresh token"""
 
     pass
+
+
+class FileTooLargeError(BusinessError):
+    """Файл слишком большой"""
+
+    pass
+
+
+class InvalidFileError(BusinessError):
+    """Невалидный файл"""
+
+    pass

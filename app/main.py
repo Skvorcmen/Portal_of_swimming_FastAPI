@@ -68,6 +68,12 @@ async def profile_page(request: Request):
     return templates.TemplateResponse(request=request, name="profile.html")
 
 
+@app.get("/live")
+async def live_page(request: Request):
+    """Страница live-таблицы"""
+    return templates.TemplateResponse(request=request, name="live.html")
+
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}

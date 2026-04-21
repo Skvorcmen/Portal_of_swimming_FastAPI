@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Live-таблица результатов{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="text-center mb-4">
+            <i class="fas fa-chart-line text-primary"></i>
+            Live-таблица результатов
+        </h1>
+        
+        <div class="card">
+            <div class="card-body">
+                <div x-data="liveTable()" x-init="initSSE()">
+                    <div x-show="loading" class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
+                        </div>
+                    </div>
+                    
+                    <div x-show="!loading && results.length === 0" class="alert alert-info">
+                        Нет завершённых результатов
+                    </div>
+                    
+                    <div x-show="!loading && results.length > 0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Заплыв</th>
+                                        <th>Дорожка</th>
+                                        <th>Спортсмен</th>
+                                        <th>Результат (сек)</th>
+                                        <th>Место</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="result in results" :key="result.lane">
+                                        <tr>
+                                            <td x-text="result.heat_number"></td>
+                                            <td x-text="result.lane"></td>
+                                            <td x-text="result.athlete_name"></td>
+                                            <td>
+                                                <span x-text="result.result_time" 
+                                                      :class="{'text-success fw-bold': result.result_time}"></span>
+                                            </td>
+                                            <td>
+                                                <span x-show="result.place === 1">🥇 1</span>
+                                                <span x-show="result.place === 2">🥈 2</span>
+                                                <span x-show="result.place === 3">🥉 3</span>
+                                                <span x-show="result.place && result.place > 3" x-text="result.place"></span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-3">
+            <a href="/" class="btn btn-secondary">На главную</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function liveTable() {
+    return {
+        results: [],
+        loading: true,
+        eventSource: null,
+        
+        initSSE() {
+            this.loading = true;
+            this.eventSource = new EventSource('/heats/live/1/events');
+            
+            this.eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (Array.isArray(data)) {
+                    this.results = data;
+                } else if (data.error) {
+                    console.error('SSE error:', data.error);
+                }
+                this.loading = false;
+            };
+            
+            this.eventSource.onerror = () => {
+                console.error('SSE connection error');
+                this.eventSource.close();
+                setTimeout(() => this.initSSE(), 5000);
+            };
+        }
+    };
+}
+</script>
+{% endblock %}
