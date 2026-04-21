@@ -14,6 +14,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 from urllib.parse import unquote
+from fastapi.responses import StreamingResponse
+from app.services.pdf_service import PDFService
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -207,4 +209,36 @@ async def competition_detail_page(
         raise HTTPException(status_code=404, detail="Competition not found")
     return templates.TemplateResponse(
         "competition_detail.html", {"request": request, "competition": competition}
+    )
+
+
+@router.get("/{competition_id}/start-list.pdf")
+async def download_start_list(
+    competition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Скачать предстартовый протокол (PDF)"""
+    pdf_buffer = await PDFService.generate_start_list(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=start_list_{competition_id}.pdf"
+        },
+    )
+
+
+@router.get("/{competition_id}/results.pdf")
+async def download_results_protocol(
+    competition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Скачать итоговый протокол (PDF)"""
+    pdf_buffer = await PDFService.generate_results_protocol(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=results_{competition_id}.pdf"
+        },
     )

@@ -5,9 +5,25 @@
         <p class="card-text">{{ comp.city }}, {{ comp.venue or 'Место не указано' }}</p>
         <p><strong>Дата:</strong> {{ comp.start_date.strftime('%d.%m.%Y') }} - {{ comp.end_date.strftime('%d.%m.%Y') }}</p>
         <span class="badge bg-secondary">{{ comp.status }}</span>
-        <a href="/competitions/{{ comp.id }}/page" class="btn btn-sm btn-primary float-end">Подробнее</a>
+        <a href="/competitions/{{ comp.id }}/page" class="btn btn-sm btn-primary float-end ms-2">Подробнее</a>
+        <button class="btn btn-sm btn-danger float-end" onclick="deleteCompetition({{ comp.id }})">Удалить</button>
     </div>
 </div>
 {% else %}
 <div class="alert alert-info">Соревнований не найдено</div>
 {% endfor %}
+
+<script>
+function deleteCompetition(compId) {
+    if (confirm('Удалить соревнование?')) {
+        fetch(`/competitions/${compId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${getToken()}`
+            }
+        }).then(() => {
+            location.reload();
+        });
+    }
+}
+</script>

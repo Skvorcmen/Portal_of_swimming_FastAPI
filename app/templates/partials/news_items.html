@@ -4,25 +4,26 @@
         <h5 class="card-title">{{ news.title }}</h5>
         <p class="card-text">{{ news.content[:200] }}...</p>
         <small class="text-muted">{{ news.published_at.strftime('%d.%m.%Y') if news.published_at else 'Черновик' }}</small>
-        <a href="/news/{{ news.id }}" class="btn btn-sm btn-primary float-end">Читать</a>
+        <a href="/news/{{ news.id }}" class="btn btn-sm btn-primary float-end ms-2">Читать</a>
+        <button class="btn btn-sm btn-danger float-end" onclick="deleteNews({{ news.id }})">Удалить</button>
     </div>
 </div>
 {% else %}
 <div class="alert alert-info">Новостей не найдено</div>
 {% endfor %}
 
-{% if pages > 1 %}
-<nav class="mt-4">
-    <ul class="pagination justify-content-center">
-        {% for p in range(1, pages + 1) %}
-        <li class="page-item {% if p == page %}active{% endif %}">
-            <a class="page-link" href="#" 
-               hx-get="/news/search?q={{ q }}&page={{ p }}&sort={{ sort }}"
-               hx-target="#newsList">
-                {{ p }}
-            </a>
-        </li>
-        {% endfor %}
-    </ul>
-</nav>
-{% endif %}
+<script>
+function deleteNews(newsId) {
+    if (confirm('Удалить эту новость?')) {
+        const token = document.cookie.match(/access_token=([^;]+)/)?.[1];
+        fetch(`/news/${newsId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        }).then(() => {
+            location.reload();
+        });
+    }
+}
+</script>

@@ -107,15 +107,18 @@ async def get_all_news(
     return await service.get_all_published(skip, limit)
 
 
-@router.get("/{news_id}", response_model=NewsResponse)
+@router.get("/{news_id}")
 async def get_news(
     news_id: int,
+    request: Request,
     service: NewsService = Depends(get_news_service),
 ):
     news = await service.get_news(news_id)
     if not news:
         raise HTTPException(status_code=404, detail="News not found")
-    return news
+    return templates.TemplateResponse(
+        "news_detail.html", {"request": request, "news": news}
+    )
 
 
 @router.put("/{news_id}", response_model=NewsResponse)

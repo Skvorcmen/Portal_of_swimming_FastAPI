@@ -1,0 +1,24 @@
+<!-- Модальное окно подтверждения -->
+<div x-data="{ show: false, action: null, message: '' }"
+     x-init="window.confirmModal = (msg, callback) => { message = msg; action = callback; show = true; }">
+    <div x-show="show"
+         class="modal fade show"
+         style="display: block; background-color: rgba(0,0,0,0.5)"
+         @click.away="show = false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Подтверждение действия</h5>
+                    <button type="button" class="btn-close" @click="show = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p x-text="message"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="show = false">Отмена</button>
+                    <button type="button" class="btn btn-danger" @click="action(); show = false">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

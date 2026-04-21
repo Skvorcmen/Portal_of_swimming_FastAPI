@@ -12,6 +12,15 @@
                 <p><strong>📅 Дата окончания:</strong> {{ competition.end_date }}</p>
                 <p><strong>📍 Место:</strong> {{ competition.venue or 'Не указано' }}, {{ competition.city or 'Не указан' }}</p>
                 <p><strong>📊 Статус:</strong> <span class="badge bg-secondary">{{ competition.status }}</span></p>
+                
+                <div class="mt-3">
+                    <a href="/competitions/{{ competition.id }}/start-list.pdf" class="btn btn-info">
+                        <i class="fas fa-file-pdf"></i> Предстартовый протокол
+                    </a>
+                    <a href="/competitions/{{ competition.id }}/results.pdf" class="btn btn-success">
+                        <i class="fas fa-file-pdf"></i> Итоговый протокол
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -84,3 +93,36 @@ function chatComponent(room) {
 }
 </script>
 {% endblock %}
+
+<div class="mt-3">
+    <button class="btn btn-danger" onclick="deleteCompetition({{ competition.id }})">
+        <i class="fas fa-trash"></i> Удалить соревнование
+    </button>
+</div>
+
+<script>
+function getToken() {
+    const match = document.cookie.match(/access_token=([^;]+)/);
+    return match ? match[1] : null;
+}
+
+function deleteCompetition(competitionId) {
+    if (confirm('Вы уверены, что хотите удалить это соревнование? Действие необратимо.')) {
+        fetch(`/competitions/${competitionId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${getToken()}`
+            }
+        }).then(response => {
+            if (response.ok) {
+                window.location.href = '/competitions/page';
+            } else {
+                alert('Ошибка при удалении');
+            }
+        }).catch(err => {
+            console.error('Ошибка:', err);
+            alert('Ошибка при удалении');
+        });
+    }
+}
+</script>
