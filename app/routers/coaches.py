@@ -9,25 +9,17 @@ from datetime import datetime
 from app.database import get_db
 from app.services.coach_service import CoachService
 from app.services.school_service import SchoolService
-from app.services.athlete_service import AthleteService
 from app.models import User, UserRole
 from app.core.dependencies import require_role
 
 router = APIRouter(prefix="/coaches", tags=["coaches"])
 templates = Jinja2Templates(directory="app/templates")
 
-
 def get_coach_service(db: AsyncSession = Depends(get_db)) -> CoachService:
     return CoachService(db)
 
-
 def get_school_service(db: AsyncSession = Depends(get_db)) -> SchoolService:
     return SchoolService(db)
-
-
-def get_athlete_service(db: AsyncSession = Depends(get_db)) -> AthleteService:
-    return AthleteService(db)
-
 
 class CoachResponse(BaseModel):
     id: int
@@ -45,17 +37,15 @@ class CoachResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
-# Страница деталей тренера
 @router.get("/{coach_id}/page")
 async def coach_detail_page(
     coach_id: int,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    """Страница профиля тренера"""
     coach_service = CoachService(db)
     school_service = SchoolService(db)
-    athlete_service = AthleteService(db)
     
     coach = await coach_service.get_coach(coach_id)
     if not coach:
@@ -65,27 +55,16 @@ async def coach_detail_page(
     if coach.school_id:
         school = await school_service.get_school(coach.school_id)
     
-    # Получаем учеников тренера
-    from sqlalchemy import select
-    from app.models import AthleteProfile, User
-    
-    result = await db.execute(
-        select(AthleteProfile)
-        .options(selectinload(AthleteProfile.user))
-        .where(AthleteProfile.coach_id == coach_id)
+    return templates.TemplateResponse(
+        "coach_detail.html",
+        {
+            "request": request,
+            "coach": coach,
+            "school": school,
+            "now": datetime.now()
+        }
     )
-    athletes = result.scalars().all()
-    
-    return templates.TemplateResponse("coach_detail.html", {
-        "request": request,
-        "coach": coach,
-        "school": school,
-        "athletes": athletes,
-        "now": datetime.now()
-    })
 
-
-# API для получения тренера
 @router.get("/{coach_id}", response_model=CoachResponse)
 async def get_coach(
     coach_id: int,
@@ -97,7 +76,6 @@ async def get_coach(
     return coach
 
 # ===== ЗАГРУЗКА АВАТАРА =====
-
 from fastapi import UploadFile, File
 from app.services.image_service import ImageService
 
@@ -116,7 +94,6 @@ async def upload_coach_avatar(
     if not coach:
         raise HTTPException(404, "Coach not found")
     
-    # Проверяем права
     if coach.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.SCHOOL_REP]:
         raise HTTPException(403, "Not authorized")
     
@@ -147,84 +124,3 @@ async def upload_coach_cover(
     await service.update_coach(coach_id, cover_url=url)
     
     return {"cover_url": url}
-
-@router.get("/{coach_id}/page")
-async def coach_page(
-    coach_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Страница профиля тренера"""
-    coach_service = CoachService(db)
-    school_service = SchoolService(db)
-    
-    coach = await coach_service.get_coach(coach_id)
-    if not coach:
-        raise HTTPException(status_code=404, detail="Coach not found")
-    
-    school = None
-    if coach.school_id:
-        school = await school_service.get_school(coach.school_id)
-    
-    # Получаем учеников тренера
-    from sqlalchemy import select
-    from app.models import AthleteProfile, User
-    
-    result = await db.execute(
-        select(AthleteProfile)
-        .options(selectinload(AthleteProfile.user))
-        .where(AthleteProfile.coach_id == coach_id)
-    )
-    athletes = result.scalars().all()
-    
-    return templates.TemplateResponse(
-        "coach_detail.html",
-        {
-            "request": request,
-            "coach": coach,
-            "school": school,
-            "athletes": athletes,
-            "now": datetime.now()
-        }
-    )
-
-@router.get("/{coach_id}/page")
-async def coach_detail_page(
-    coach_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Страница профиля тренера"""
-    from datetime import datetime
-    from sqlalchemy.orm import selectinload
-    from app.models import AthleteProfile, User
-    
-    coach_service = CoachService(db)
-    school_service = SchoolService(db)
-    
-    coach = await coach_service.get_coach(coach_id)
-    if not coach:
-        raise HTTPException(status_code=404, detail="Coach not found")
-    
-    school = None
-    if coach.school_id:
-        school = await school_service.get_school(coach.school_id)
-    
-    # Получаем учеников тренера
-    result = await db.execute(
-        select(AthleteProfile)
-        .options(selectinload(AthleteProfile.user))
-        .where(AthleteProfile.coach_id == coach_id)
-    )
-    athletes = result.scalars().all()
-    
-    return templates.TemplateResponse(
-        "coach_detail.html",
-        {
-            "request": request,
-            "coach": coach,
-            "school": school,
-            "athletes": athletes,
-            "now": datetime.now()
-        }
-    )

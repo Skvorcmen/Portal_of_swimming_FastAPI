@@ -24,7 +24,6 @@
                 </p>
                 {% endif %}
                 
-                <!-- Контакты -->
                 <div class="mt-3 text-start">
                     {% if coach.phone %}
                     <p class="mb-2">
@@ -40,7 +39,6 @@
                     {% endif %}
                 </div>
                 
-                <!-- Социальные сети тренера -->
                 <div class="mt-3">
                     <div class="d-flex justify-content-center gap-2">
                         {% if coach.vk_url %}
@@ -116,31 +114,6 @@
                 </div>
             </div>
         </div>
-        
-        {% if athletes %}
-        <div class="card">
-            <div class="card-body">
-                <h4 class="card-title">Ученики</h4>
-                <div class="list-group">
-                    {% for athlete in athletes %}
-                    <a href="/athletes/{{ athlete.id }}/page" class="list-group-item list-group-item-action">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ athlete.user.full_name }}</strong>
-                                {% if athlete.rank %}
-                                <span class="badge bg-success ms-2">{{ athlete.rank }}</span>
-                                {% endif %}
-                                <br>
-                                <small class="text-muted">{{ athlete.gender or 'Пол не указан' }}</small>
-                            </div>
-                            <i class="fas fa-chevron-right"></i>
-                        </div>
-                    </a>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
         
         <div class="text-center mt-3">
             <a href="javascript:history.back()" class="btn btn-secondary">← Назад</a>
