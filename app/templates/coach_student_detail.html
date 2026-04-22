@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>
+                <i class="fas fa-user-graduate text-primary"></i>
+                {{ student.full_name }}
+            </h1>
+            <a href="/coach/dashboard" class="btn btn-secondary">
+                ← Назад к ученикам
+            </a>
+        </div>
+        
+        <!-- Информация об ученике -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Личная информация</h5>
+                        <table class="table table-sm">
+                            <tr>
+                                <th>Email:</th>
+                                <td>{{ student.email }}</td>
+                            </tr>
+                            <tr>
+                                <th>Дата рождения:</th>
+                                <td>{{ student.birth_date.strftime('%d.%m.%Y') if student.birth_date else '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Пол:</th>
+                                <td>{{ student.gender or '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Разряд:</th>
+                                <td>{{ student.rank or '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Школа:</th>
+                                <td>{{ student.school_name or '-' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Результаты -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Результаты выступлений</h5>
+            </div>
+            <div class="card-body">
+                {% if results %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Соревнование</th>
+                                <th>Дата</th>
+                                <th>Дистанция</th>
+                                <th>Стиль</th>
+                                <th>Результат</th>
+                                <th>Место</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for result in results %}
+                            <tr>
+                                <td>{{ result.competition_name }}</td>
+                                <td>{{ result.start_date.strftime('%d.%m.%Y') if result.start_date else '-' }}</td>
+                                <td>{{ result.distance }}м</td>
+                                <td>{{ result.stroke }}</td>
+                                <td><strong>{{ "%.2f"|format(result.result_time) }} сек</strong></td>
+                                <td>
+                                    {% if result.place == 1 %}🥇 1
+                                    {% elif result.place == 2 %}🥈 2
+                                    {% elif result.place == 3 %}🥉 3
+                                    {% else %}{{ result.place or '-' }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center">Нет результатов</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

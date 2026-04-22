@@ -1,0 +1,352 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+from pydantic import BaseModel
+from datetime import datetime
+from app.core.cache import cached, delete_cache, clear_cache_pattern
+from app.database import get_db
+from app.services.competition_service import CompetitionService
+from app.auth import get_current_active_user
+from app.models import User
+from app.core.dependencies import require_role
+from app.models import UserRole
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from urllib.parse import unquote
+from fastapi.responses import StreamingResponse
+from app.services.pdf_service import PDFService
+from app.core.cache import cached, clear_cache_pattern, delete_cache
+from app.core.cache import cached
+
+templates = Jinja2Templates(directory="app/templates")
+
+router = APIRouter(prefix="/competitions", tags=["competitions"])
+
+
+def get_competition_service(db: AsyncSession = Depends(get_db)) -> CompetitionService:
+    return CompetitionService(db)
+
+
+# Схемы для запросов/ответов
+class CompetitionCreate(BaseModel):
+    name: str
+    description: str | None = None
+    start_date: datetime
+    end_date: datetime
+    venue: str | None = None
+    city: str | None = None
+    status: str = "draft"
+    max_participants: int = 0
+
+
+class CompetitionUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    venue: str | None = None
+    city: str | None = None
+    status: str | None = None
+    max_participants: int | None = None
+
+
+class CompetitionResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    start_date: datetime
+    end_date: datetime
+    venue: str | None
+    city: str | None
+    status: str
+    max_participants: int
+    created_by: int | None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===== КЭШИРОВАНИЕ =====
+
+
+@router.get("/cached-list")
+@cached(expire=60, key_prefix="competitions_list")
+async def get_all_competitions_cached(
+    skip: int = 0,
+    limit: int = 100,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    return await service.get_all_competitions(skip, limit)
+
+
+@router.get("/cached-active")
+@cached(expire=30, key_prefix="competitions_active")
+async def get_active_competitions_cached(
+    service: CompetitionService = Depends(get_competition_service),
+):
+    return await service.get_active_competitions()
+
+
+@router.get("/cached-upcoming")
+@cached(expire=30, key_prefix="competitions_upcoming")
+async def get_upcoming_competitions_cached(
+    service: CompetitionService = Depends(get_competition_service),
+):
+    return await service.get_upcoming_competitions()
+
+
+@router.get("/cached/{competition_id}")
+@cached(expire=300, key_prefix="competition_detail")
+async def get_competition_cached(
+    competition_id: int,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    competition = await service.get_competition(competition_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return competition
+
+
+
+@router.get("/page")
+async def competitions_page(
+    request: Request,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    competitions = await service.get_all_competitions()
+    return templates.TemplateResponse(
+        "competitions_list.html", {"request": request, "competitions": competitions}
+    )
+
+
+@router.get("/search")
+async def search_competitions(
+    request: Request,
+    name: str = "",
+    city: str = "",
+    status: str = "",
+    page: int = 1,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    # Декодируем URL-encoded строки
+    name = unquote(name)
+    city = unquote(city)
+    status = unquote(status)
+
+    result = await service.search_competitions(name, city, status, page)
+    return templates.TemplateResponse(
+        "partials/competition_items.html",
+        {
+            "request": request,
+            "competitions": result["items"],
+            "page": page,
+            "total": result["total"],
+            "pages": result["pages"],
+        },
+    )
+
+
+@router.get("/active", response_model=List[CompetitionResponse])
+async def get_active_competitions(
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Получить список активных соревнований"""
+    return await service.get_active_competitions()
+
+
+@router.get("/upcoming", response_model=List[CompetitionResponse])
+async def get_upcoming_competitions(
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Получить список предстоящих соревнований"""
+    return await service.get_upcoming_competitions()
+
+
+@router.post("/", response_model=CompetitionResponse)
+async def create_competition(
+    competition_data: CompetitionCreate,
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Создать новое соревнование (только ADMIN, SECRETARY)"""
+    competition = await service.create_competition(
+        name=competition_data.name,
+        description=competition_data.description,
+        start_date=competition_data.start_date,
+        end_date=competition_data.end_date,
+        venue=competition_data.venue,
+        city=competition_data.city,
+        status=competition_data.status,
+        max_participants=competition_data.max_participants,
+        created_by=current_user.id,
+    )
+    return competition
+
+
+@router.get("/", response_model=List[CompetitionResponse])
+async def get_all_competitions(
+    skip: int = 0,
+    limit: int = 100,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Получить список всех соревнований"""
+    return await service.get_all_competitions(skip, limit)
+
+
+@router.get("/test-cache")
+@cached(expire=30, key_prefix="test")
+async def test_cache():
+    import time
+
+    return {"timestamp": time.time(), "message": "Cached response"}
+
+
+@router.get("/{competition_id}", response_model=CompetitionResponse)
+async def get_competition(
+    competition_id: int,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Получить соревнование по ID"""
+    competition = await service.get_competition(competition_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return competition
+
+
+@router.put("/{competition_id}", response_model=CompetitionResponse)
+async def update_competition(
+    competition_id: int,
+    competition_data: CompetitionUpdate,
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Обновить соревнование (только ADMIN, SECRETARY)"""
+    # Убираем None значения
+    update_data = {
+        k: v for k, v in competition_data.model_dump().items() if v is not None
+    }
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+
+    competition = await service.update_competition(competition_id, **update_data)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return competition
+
+
+@router.delete("/{competition_id}")
+async def delete_competition(
+    competition_id: int,
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+    service: CompetitionService = Depends(get_competition_service),
+):
+    """Удалить соревнование (только ADMIN, SECRETARY)"""
+    deleted = await service.delete_competition(competition_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return {"message": "Competition deleted successfully"}
+
+
+@router.get("/{competition_id}/page")
+async def competition_detail_page(
+    competition_id: int,
+    request: Request,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    competition = await service.get_competition(competition_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return templates.TemplateResponse(
+        "competition_detail.html", {"request": request, "competition": competition}
+    )
+
+
+@router.get("/{competition_id}/start-list.pdf")
+async def download_start_list(
+    competition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Скачать предстартовый протокол (PDF)"""
+    pdf_buffer = await PDFService.generate_start_list(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=start_list_{competition_id}.pdf"
+        },
+    )
+
+
+@router.get("/{competition_id}/results.pdf")
+async def download_results_protocol(
+    competition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Скачать итоговый протокол (PDF)"""
+    pdf_buffer = await PDFService.generate_results_protocol(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=results_{competition_id}.pdf"
+        },
+    )
+
+
+@router.get("/", response_model=List[CompetitionResponse])
+@cached(expire=60, key_prefix="competitions_list")
+async def get_all_competitions(
+    skip: int = 0,
+    limit: int = 100,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    return await service.get_all_competitions(skip, limit)
+
+
+@router.get("/{competition_id}", response_model=CompetitionResponse)
+@cached(expire=300, key_prefix="competition_detail")
+async def get_competition(
+    competition_id: int,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    competition = await service.get_competition(competition_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    return competition
+
+
+# При обновлении или удалении очищаем кэш
+@router.put("/{competition_id}", response_model=CompetitionResponse)
+async def update_competition(
+    competition_id: int,
+    competition_data: CompetitionUpdate,
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+    service: CompetitionService = Depends(get_competition_service),
+):
+    update_data = {
+        k: v for k, v in competition_data.model_dump().items() if v is not None
+    }
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+
+    competition = await service.update_competition(competition_id, **update_data)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    # Очищаем кэш
+    await clear_cache_pattern("competition_list*")
+    await clear_cache_pattern(f"competition_detail:{competition_id}*")
+
+    return competition
+
+@router.get("/cached-list")
+@cached(expire=60, key_prefix="competitions_list")
+async def get_all_competitions_cached(
+    skip: int = 0,
+    limit: int = 100,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    return await service.get_all_competitions(skip, limit)

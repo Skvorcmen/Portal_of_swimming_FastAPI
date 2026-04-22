@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/schools/{{ school.id }}/page">{{ school.name }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ branch.name }}</li>
+            </ol>
+        </nav>
+        
+        <!-- Информация о филиале -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>{{ branch.name }}</h3>
+            </div>
+            <div class="card-body">
+                <p><strong>Адрес:</strong> {{ branch.address }}</p>
+                {% if branch.phone %}
+                <p><strong>Телефон:</strong> {{ branch.phone }}</p>
+                {% endif %}
+                <p><strong>Школа:</strong> <a href="/schools/{{ school.id }}/page">{{ school.name }}</a></p>
+                
+                <!-- Социальные сети филиала -->
+                <div class="mt-3">
+                    <strong>Соцсети филиала:</strong>
+                    <div class="mt-2">
+                        {% if branch.vk_url %}
+                        <a href="{{ branch.vk_url }}" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="fab fa-vk"></i> VK
+                        </a>
+                        {% endif %}
+                        {% if branch.telegram_url %}
+                        <a href="{{ branch.telegram_url }}" target="_blank" class="btn btn-sm btn-outline-info me-2">
+                            <i class="fab fa-telegram"></i> Telegram
+                        </a>
+                        {% endif %}
+                        {% if branch.youtube_url %}
+                        <a href="{{ branch.youtube_url }}" target="_blank" class="btn btn-sm btn-outline-danger me-2">
+                            <i class="fab fa-youtube"></i> YouTube
+                        </a>
+                        {% endif %}
+                        {% if branch.instagram_url %}
+                        <a href="{{ branch.instagram_url }}" target="_blank" class="btn btn-sm btn-outline-secondary me-2">
+                            <i class="fab fa-instagram"></i> Instagram
+                        </a>
+                        {% endif %}
+                        {% if not branch.vk_url and not branch.telegram_url and not branch.youtube_url and not branch.instagram_url %}
+                        <span class="text-muted">Нет ссылок на соцсети</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Старший тренер филиала -->
+        <div id="head-coach-section" class="mb-4"></div>
+        
+        <!-- Остальные тренеры -->
+        <div id="coaches-section"></div>
+    </div>
+</div>
+
+<script>
+async function loadBranchCoaches() {
+    try {
+        const response = await fetch('/branches/{{ branch.id }}/coaches');
+        const coaches = await response.json();
+        
+        const headCoach = coaches.find(c => c.is_head_coach === true);
+        const otherCoaches = coaches.filter(c => c.is_head_coach !== true);
+        
+        const headCoachSection = document.getElementById('head-coach-section');
+        if (headCoach) {
+            headCoachSection.innerHTML = `
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Старший тренер филиала</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-start">
+                            <div class="flex-shrink-0 me-3">
+                                ${headCoach.photo_url ? 
+                                    `<img src="${headCoach.photo_url}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 50%;">` : 
+                                    `<i class="fas fa-user-circle fa-4x text-secondary"></i>`
+                                }
+                            </div>
+                            <div>
+                                <h4>${headCoach.full_name}</h4>
+                                <p><strong>Квалификация:</strong> ${headCoach.qualification || 'Не указана'}</p>
+                                <p><strong>Стаж:</strong> ${headCoach.experience_years || 0} лет</p>
+                                <p><strong>Специализация:</strong> ${headCoach.specialization || 'Не указана'}</p>
+                                <a href="/coaches/${headCoach.id}/page" class="btn btn-outline-success btn-sm">Профиль тренера</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            headCoachSection.innerHTML = `
+                <div class="alert alert-info">
+                    В этом филиале пока нет старшего тренера
+                </div>
+            `;
+        }
+        
+        const coachesSection = document.getElementById('coaches-section');
+        if (otherCoaches.length > 0) {
+            let coachesHtml = `
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Тренерский состав филиала (${otherCoaches.length})</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+            `;
+            otherCoaches.forEach(coach => {
+                coachesHtml += `
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${coach.full_name}</strong>
+                                <br>
+                                <small class="text-muted">
+                                    ${coach.qualification || 'Квалификация не указана'} | 
+                                    Стаж: ${coach.experience_years || 0} лет | 
+                                    Специализация: ${coach.specialization || 'не указана'}
+                                </small>
+                            </div>
+                            <a href="/coaches/${coach.id}/page" class="btn btn-sm btn-outline-primary">Профиль</a>
+                        </div>
+                    </div>
+                `;
+            });
+            coachesHtml += `</div></div>`;
+            coachesSection.innerHTML = coachesHtml;
+        } else {
+            coachesSection.innerHTML = `
+                <div class="alert alert-secondary">
+                    В этом филиале пока нет других тренеров
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки тренеров:', error);
+        document.getElementById('head-coach-section').innerHTML = '<div class="alert alert-danger">Ошибка загрузки данных</div>';
+    }
+}
+
+loadBranchCoaches();
+</script>
+{% endblock %}

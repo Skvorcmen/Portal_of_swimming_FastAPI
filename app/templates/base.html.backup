@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Плавательный портал</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-swimmer"></i> Плавательный портал</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/news/page">Новости</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/schools/page">Школы</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/competitions/page">Соревнования</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/articles/page">Обучение</a>
+                    </li>
+                    <li class="nav-item"><a class="nav-link" href="/">Главная</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/live"><i class="fas fa-chart-line"></i> Live</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/login">Вход</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/register">Регистрация</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <main class="container mt-4">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="/static/js/toast.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+<!-- Глобальное модальное окно подтверждения -->
+<div x-data="{ showModal: false, modalMessage: '', modalAction: null }" 
+     x-init="window.showConfirm = (msg, callback) => { modalMessage = msg; modalAction = callback; showModal = true; }">
+    <div x-show="showModal" 
+         class="modal fade show" 
+         style="display: block; background-color: rgba(0,0,0,0.5); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999;"
+         @click.away="showModal = false">
+        <div class="modal-dialog modal-dialog-centered" style="margin-top: 20%;">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Подтверждение действия</h5>
+                    <button type="button" class="btn-close btn-close-white" @click="showModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p x-text="modalMessage"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @click="showModal = false">Отмена</button>
+                    <button type="button" class="btn btn-danger" @click="modalAction(); showModal = false">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function getToken() {
+    const match = document.cookie.match(/access_token=([^;]+)/);
+    return match ? match[1] : null;
+}
+</script>
