@@ -8,8 +8,8 @@
                 <h1>{{ competition.name }}</h1>
                 <p class="text-muted">{{ competition.description or 'Нет описания' }}</p>
                 <hr>
-                <p><strong>📅 Дата начала:</strong> {{ competition.start_date }}</p>
-                <p><strong>📅 Дата окончания:</strong> {{ competition.end_date }}</p>
+                <p><strong>📅 Дата начала:</strong> {{ competition.start_date.strftime('%d.%m.%Y %H:%M') if competition.start_date else 'Не указана' }}</p>
+                <p><strong>📅 Дата окончания:</strong> {{ competition.end_date.strftime('%d.%m.%Y %H:%M') if competition.end_date else 'Не указана' }}</p>
                 <p><strong>📍 Место:</strong> {{ competition.venue or 'Не указано' }}, {{ competition.city or 'Не указан' }}</p>
                 <p><strong>📊 Статус:</strong> <span class="badge bg-secondary">{{ competition.status }}</span></p>
                 
@@ -18,7 +18,8 @@
                         <i class="fas fa-file-pdf"></i> Предстартовый протокол
                     </a>
                     <a href="/competitions/{{ competition.id }}/results.pdf" class="btn btn-success">
-                        <i class="fas fa-file-pdf"></i> Итоговый протокол</a>
+                        <i class="fas fa-file-pdf"></i> Итоговый протокол
+                    </a>
                     <a href="/competitions/{{ competition.id }}/results.csv" class="btn btn-info">
                         <i class="fas fa-file-csv"></i> CSV результаты
                     </a>
@@ -27,127 +28,104 @@
         </div>
     </div>
     <div class="col-md-4">
-        <div x-data="chatComponent('competition_{{ competition.id }}')" x-init="initWebSocket()" class="card">
+        <div class="card">
             <div class="card-header bg-primary text-white">
-                <i class="fas fa-comments"></i> Чат соревнования
+                <i class="fas fa-bell"></i> Уведомления
             </div>
-            <div class="card-body" style="height: 300px; overflow-y: auto;" x-ref="messagesContainer">
-                <template x-for="(msg, idx) in messages" :key="idx">
-                    <div class="mb-2">
-                        <strong x-text="msg.user"></strong>:
-                        <span x-text="msg.message"></span>
-                        <small class="text-muted ms-2" x-text="msg.created_at ? new Date(msg.created_at).toLocaleTimeString() : ''"></small>
-                    </div>
-                </template>
-                <div x-show="messages.length === 0" class="text-muted text-center">
-                    Нет сообщений. Будьте первым!
-                </div>
-            </div>
-            <div class="card-footer">
-                <div class="input-group">
-                    <input type="text" class="form-control" x-model="newMessage" @keyup.enter="sendMessage()" placeholder="Введите сообщение...">
-                    <button class="btn btn-primary" @click="sendMessage()" :disabled="!newMessage.trim()">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
+            <div class="card-body text-center">
+                <button onclick="toggleSubscription({{ competition.id }})" id="subscribeBtn" class="btn btn-outline-primary">
+                    <i class="fas fa-bell"></i> Подписаться на результаты
+                </button>
+                <div id="subscribeMessage" class="mt-2 small text-muted"></div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-function chatComponent(room) {
-    return {
-        room: room,
-        messages: [],
-        newMessage: '',
-        ws: null,
+let currentSubscriptionStatus = false;
 
-        initWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/chat/${this.room}`;
-            this.ws = new WebSocket(wsUrl);
-
-            this.ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.type === 'message' || data.type === 'history') {
-                    this.messages.push(data);
-                    this.$nextTick(() => {
-                        const container = this.$refs.messagesContainer;
-                        if (container) container.scrollTop = container.scrollHeight;
-                    });
-                }
-            };
-
-            this.ws.onclose = () => {
-                console.log('WebSocket disconnected, reconnecting...');
-                setTimeout(() => this.initWebSocket(), 3000);
-            };
-        },
-
-        sendMessage() {
-            if (this.newMessage.trim() && this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify({ message: this.newMessage.trim() }));
-                this.newMessage = '';
-            }
+// Проверка статуса подписки
+function checkSubscriptionStatus(competitionId) {
+    fetch(`/competitions/${competitionId}/subscription-status`, {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        currentSubscriptionStatus = data.subscribed;
+        const btn = document.getElementById('subscribeBtn');
+        if (data.subscribed) {
+            btn.innerHTML = '<i class="fas fa-bell"></i> ✓ Вы подписаны';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-success');
+        } else {
+            btn.innerHTML = '<i class="fas fa-bell"></i> Подписаться на результаты';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-primary');
         }
-    }
+    })
+    .catch(() => {});
 }
+
+// Переключение подписки
+function toggleSubscription(competitionId) {
+    // Сначала проверяем авторизацию
+    fetch('/auth/me', { credentials: 'include' })
+        .then(response => {
+            if (!response.ok) {
+                sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
+                window.location.href = '/login';
+                return;
+            }
+            // Авторизованы - переключаем подписку
+            fetch(`/competitions/${competitionId}/subscribe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                const btn = document.getElementById('subscribeBtn');
+                const msgDiv = document.getElementById('subscribeMessage');
+                if (data.subscribed) {
+                    btn.innerHTML = '<i class="fas fa-bell"></i> ✓ Вы подписаны';
+                    btn.classList.remove('btn-outline-primary');
+                    btn.classList.add('btn-success');
+                    msgDiv.innerHTML = '✓ Вы подписались на результаты';
+                    msgDiv.style.color = 'green';
+                    currentSubscriptionStatus = true;
+                } else {
+                    btn.innerHTML = '<i class="fas fa-bell"></i> Подписаться на результаты';
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-primary');
+                    msgDiv.innerHTML = 'Вы отписались от результатов';
+                    msgDiv.style.color = 'red';
+                    currentSubscriptionStatus = false;
+                }
+                setTimeout(() => { msgDiv.innerHTML = ''; }, 3000);
+            })
+            .catch(() => {
+                alert('Ошибка при подписке');
+            });
+        })
+        .catch(() => {
+            sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
+            window.location.href = '/login';
+        });
+}
+
+// Загрузка страницы
+document.addEventListener('DOMContentLoaded', function() {
+    const competitionId = {{ competition.id }};
+    
+    // Проверяем, вернулись ли с логина
+    const redirectUrl = sessionStorage.getItem('redirectAfterLogin');
+    if (redirectUrl && window.location.pathname === redirectUrl) {
+        sessionStorage.removeItem('redirectAfterLogin');
+    }
+    
+    // Проверяем статус подписки
+    checkSubscriptionStatus(competitionId);
+});
 </script>
 {% endblock %}
-
-<div class="mt-3">
-    <button class="btn btn-danger" onclick="deleteCompetition({{ competition.id }})">
-        <i class="fas fa-trash"></i> Удалить соревнование
-    </button>
-</div>
-
-<script>
-function getToken() {
-    const match = document.cookie.match(/access_token=([^;]+)/);
-    return match ? match[1] : null;
-}
-
-function deleteCompetition(competitionId) {
-    if (confirm('Вы уверены, что хотите удалить это соревнование? Действие необратимо.')) {
-        fetch(`/competitions/${competitionId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${getToken()}`
-            }
-        }).then(response => {
-            if (response.ok) {
-                window.location.href = '/competitions/page';
-            } else {
-                alert('Ошибка при удалении');
-            }
-        }).catch(err => {
-            console.error('Ошибка:', err);
-            alert('Ошибка при удалении');
-        });
-    }
-}
-</script>
-<script>
-// Дополняем существующий chatComponent
-function chatComponentWithNotifications(room) {
-    const component = chatComponent(room);
-    
-    // Сохраняем оригинальный sendMessage
-    const originalSend = component.sendMessage;
-    
-    // Переопределяем sendMessage с уведомлением
-    component.sendMessage = function() {
-        if (this.newMessage.trim() && this.ws && this.ws.readyState === WebSocket.OPEN) {
-            const message = this.newMessage.trim();
-            this.ws.send(JSON.stringify({ message: message }));
-            showSuccess('✉️ Сообщение отправлено');
-            this.newMessage = '';
-        } else if (!this.connected) {
-            showError('❌ Нет соединения с чатом');
-        }
-    };
-    
-    return component;
-}
-</script>

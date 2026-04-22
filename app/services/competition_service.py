@@ -68,3 +68,62 @@ class CompetitionService:
         self, name: str = "", city: str = "", status: str = "", page: int = 1
     ) -> dict:
         return await self.repo.search(name, city, status, page)
+
+    async def send_results_notifications(self, competition_id: int) -> None:
+        """Отправить уведомления подписчикам о завершении соревнования"""
+        from app.models import CompetitionSubscription, User
+        from app.core.email import send_email
+        
+        # Получаем соревнование
+        competition = await self.get_competition(competition_id)
+        if not competition:
+            return
+        
+        # Получаем всех подписчиков
+        result = await self.session.execute(
+            select(CompetitionSubscription).where(
+                CompetitionSubscription.competition_id == competition_id
+            )
+        )
+        subscribers = result.scalars().all()
+        
+        if not subscribers:
+            return
+        
+        # Получаем email подписчиков
+        user_ids = [sub.user_id for sub in subscribers]
+        users_result = await self.session.execute(
+            select(User).where(User.id.in_(user_ids))
+        )
+        users = users_result.scalars().all()
+        
+        # Создаем новость на портале
+        from app.models import News
+        news = News(
+            title=f"Завершены соревнования: {competition.name}",
+            content=f"Соревнования {competition.name} завершены. Результаты доступны на странице соревнования.",
+            is_published=True,
+            published_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc)
+        )
+        self.session.add(news)
+        
+        # Отправляем email каждому подписчику
+        results_link = f"http://localhost:8000/competitions/{competition_id}/page"
+        
+        for user in users:
+            if user.email:
+                await send_email(
+                    to_email=user.email,
+                    subject=f"Результаты соревнования: {competition.name}",
+                    template_name="competition_results.html",
+                    context={
+                        "user_name": user.full_name,
+                        "competition_name": competition.name,
+                        "results_link": results_link,
+                        "competition": competition
+                    }
+                )
+        
+        await self.session.commit()
+        logger.info(f"Sent results notifications for competition {competition_id} to {len(users)} subscribers")

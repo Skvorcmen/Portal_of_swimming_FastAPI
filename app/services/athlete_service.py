@@ -55,23 +55,37 @@ class AthleteService:
         distance: int,
         stroke: str,
         time_seconds: float,
+        set_date: str = None,
     ) -> PersonalBest:
         """Добавить личный рекорд"""
-        return await self.pb_repo.create(
-            athlete_id=athlete_id,
-            distance=distance,
-            stroke=stroke,
-            time_seconds=time_seconds,
-        )
+        from datetime import datetime
+        data = {
+            'athlete_id': athlete_id,
+            'distance': distance,
+            'stroke': stroke,
+            'time_seconds': time_seconds,
+        }
+        if set_date:
+            try:
+                data['set_date'] = datetime.strptime(set_date, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        result = await self.pb_repo.create(**data)
+        if hasattr(result, 'set_date') and result.set_date and not isinstance(result.set_date, str):
+            result.set_date = result.set_date.isoformat()
+        return result
     
     async def get_personal_bests(self, athlete_id: int) -> List[PersonalBest]:
         """Получить все личные рекорды спортсмена"""
-        return await self.pb_repo.get_by_athlete(athlete_id)
+        result = await self.pb_repo.get_by_athlete(athlete_id)
+        for record in result:
+            if hasattr(record, 'set_date') and record.set_date and not isinstance(record.set_date, str):
+                record.set_date = record.set_date.isoformat()
+        return result
     
     async def delete_personal_best(self, pb_id: int) -> bool:
         """Удалить личный рекорд"""
         return await self.pb_repo.delete(pb_id)
-
 
     async def get_personal_best(self, pb_id: int) -> Optional[PersonalBest]:
         """Получить личный рекорд по ID"""

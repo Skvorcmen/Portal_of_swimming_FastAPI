@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #0d6efd; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .button { background: #0d6efd; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏊 Результаты соревнований</h1>
+        </div>
+        <div class="content">
+            <p>Здравствуйте, {{ user_name }}!</p>
+            <p>Соревнования <strong>{{ competition_name }}</strong> завершены.</p>
+            <p>Результаты доступны по ссылке:</p>
+            <p><a href="{{ results_link }}" class="button">Посмотреть результаты</a></p>
+            <p>Спасибо за интерес к нашему порталу!</p>
+        </div>
+    </div>
+</body>
+</html>

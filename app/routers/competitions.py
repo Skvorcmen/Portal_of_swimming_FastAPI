@@ -1,3 +1,9 @@
+from sqlalchemy import select
+from app.models import Competition, CompetitionSubscription
+
+
+from app.auth import get_current_user_optional_cookie
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -273,3 +279,79 @@ async def download_results_csv(
             "Content-Disposition": f"attachment; filename=results_{competition_id}.csv"
         },
     )
+
+@router.post("/{competition_id}/subscribe")
+async def toggle_subscription(
+    competition_id: int,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    db: AsyncSession = Depends(get_db),
+):
+    """Подписаться/отписаться от результатов соревнования"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Проверяем, существует ли соревнование
+    competition = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = competition.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    
+    # Проверяем существующую подписку
+    from app.models import CompetitionSubscription
+    result = await db.execute(
+        select(CompetitionSubscription).where(
+            CompetitionSubscription.user_id == current_user.id,
+            CompetitionSubscription.competition_id == competition_id
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    
+    if subscription:
+        # Отписываемся
+        await db.delete(subscription)
+        await db.commit()
+        return {"subscribed": False}
+    else:
+        # Подписываемся
+        new_subscription = CompetitionSubscription(
+            user_id=current_user.id,
+            competition_id=competition_id
+        )
+        db.add(new_subscription)
+        await db.commit()
+        return {"subscribed": True}
+
+
+@router.get("/{competition_id}/subscription-status")
+async def get_subscription_status(
+    competition_id: int,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    db: AsyncSession = Depends(get_db),
+):
+    """Проверить статус подписки"""
+    if not current_user:
+        return {"subscribed": False}
+    
+    from app.models import CompetitionSubscription
+    result = await db.execute(
+        select(CompetitionSubscription).where(
+            CompetitionSubscription.user_id == current_user.id,
+            CompetitionSubscription.competition_id == competition_id
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    
+    return {"subscribed": subscription is not None}
+
+@router.post("/{competition_id}/send-notifications")
+async def send_competition_notifications(
+    competition_id: int,
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отправить уведомления подписчикам (ADMIN/SECRETARY)"""
+    service = CompetitionService(db)
+    await service.send_results_notifications(competition_id)
+    return {"message": "Notifications sent successfully"}

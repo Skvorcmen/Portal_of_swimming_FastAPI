@@ -7,49 +7,37 @@
         <div class="card mb-4">
             <div class="card-body">
                 <h3 class="card-title text-center mb-4">Личный кабинет</h3>
-
-                <div x-data="profile()" x-init="loadProfile()">
-                    <div x-show="loading" class="text-center">Загрузка...</div>
-                    <div x-show="!loading && error" class="alert alert-danger" x-text="error"></div>
-
-                    <div x-show="!loading && !error">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">ID</label>
-                                    <p class="form-control-plaintext" x-text="user.id"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Email</label>
-                                    <p class="form-control-plaintext" x-text="user.email"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Имя пользователя</label>
-                                    <p class="form-control-plaintext" x-text="user.username"></p>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Полное имя</label>
-                                    <p class="form-control-plaintext" x-text="user.full_name"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Роль</label>
-                                    <p class="form-control-plaintext" x-text="user.role"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Дата регистрации</label>
-                                    <p class="form-control-plaintext" x-text="new Date(user.created_at).toLocaleString()"></p>
-                                </div>
-                            </div>
+                <div id="userInfo">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Личные рекорды - проверяем role.name или role.value -->
-        {% if current_user and (current_user.role.name == 'ATHLETE' or current_user.role.value == 'athlete') %}
+        <!-- Информация о спортсмене -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-user-circle"></i> Профиль спортсмена</h5>
+            </div>
+            <div class="card-body">
+                <div id="athleteInfo">
+                    <div class="text-center">
+                        <div class="spinner-border text-success spinner-border-sm" role="status"></div>
+                        <span class="ms-2">Загрузка...</span>
+                    </div>
+                </div>
+                <div class="mt-3 text-center">
+                    <button class="btn btn-sm btn-outline-primary" onclick="editAthleteProfile()">
+                        <i class="fas fa-edit"></i> Редактировать профиль
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Личные рекорды -->
         <div class="card">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0"><i class="fas fa-medal"></i> Мои личные рекорды</h5>
@@ -57,7 +45,7 @@
             <div class="card-body">
                 <form id="addRecordForm" class="mb-4 p-3 bg-light rounded">
                     <div class="row g-2">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small">Дистанция</label>
                             <select class="form-select form-select-sm" id="distance" required>
                                 <option value="">Выберите</option>
@@ -69,7 +57,7 @@
                                 <option value="1500">1500 метров</option>
                             </select>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small">Стиль</label>
                             <select class="form-select form-select-sm" id="stroke" required>
                                 <option value="">Выберите</option>
@@ -80,8 +68,12 @@
                                 <option value="medley">Комплекс</option>
                             </select>
                         </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Дата рекорда</label>
+                            <input type="date" class="form-control form-control-sm" id="setDate">
+                        </div>
                         <div class="col-md-3">
-                            <label class="form-label small">Время (секунды)</label>
+                            <label class="form-label small">Время (сек)</label>
                             <input type="number" step="0.01" class="form-control form-control-sm" id="timeSeconds" placeholder="Например: 25.5" required>
                         </div>
                         <div class="col-md-1 d-flex align-items-end">
@@ -100,92 +92,165 @@
                 </div>
             </div>
         </div>
-        {% endif %}
-
-        <div class="d-grid gap-2 mt-3">
-            <a href="/" class="btn btn-secondary">На главную</a>
-            <button onclick="logout()" class="btn btn-danger">Выйти</button>
-        </div>
     </div>
 </div>
 
-<script>
-function profile() {
-    return {
-        user: null,
-        loading: true,
-        error: '',
+<!-- Модальное окно редактирования профиля -->
+<div class="modal fade" id="editProfileModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редактирование профиля спортсмена</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editProfileForm">
+                    <div class="mb-3">
+                        <label class="form-label">Дата рождения</label>
+                        <input type="date" class="form-control" id="editBirthDate">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Пол</label>
+                        <select class="form-select" id="editGender">
+                            <option value="">Не указан</option>
+                            <option value="male">Мужской</option>
+                            <option value="female">Женский</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Разряд</label>
+                        <input type="text" class="form-control" id="editRank" placeholder="Например: КМС, 1 разряд">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveAthleteProfile()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-        async loadProfile() {
-            this.loading = true;
-            try {
-                const response = await fetch('/auth/me', { credentials: 'include' });
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                    return;
-                }
-                if (response.ok) {
-                    this.user = await response.json();
-                    console.log('User loaded:', this.user);
-                } else {
-                    this.error = 'Не удалось загрузить профиль';
-                }
-            } catch (err) {
-                this.error = 'Ошибка сети';
-            } finally {
-                this.loading = false;
-            }
-        }
+{% block scripts %}
+<script>
+let currentAthlete = null;
+
+async function loadUser() {
+    const response = await fetch('/auth/me', { credentials: 'include' });
+    if (response.ok) {
+        const user = await response.json();
+        document.getElementById('userInfo').innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-user"></i> Полное имя:</strong> ${user.full_name}</p>
+                    <p><strong><i class="fas fa-envelope"></i> Email:</strong> ${user.email}</p>
+                    <p><strong><i class="fas fa-user-tag"></i> Имя пользователя:</strong> ${user.username}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-tag"></i> Роль:</strong> <span class="badge bg-primary">${user.role}</span></p>
+                    <p><strong><i class="fas fa-calendar"></i> Дата регистрации:</strong> ${new Date(user.created_at).toLocaleDateString()}</p>
+                    <p><strong><i class="fas fa-check-circle"></i> Статус:</strong> ${user.is_active ? 'Активен' : 'Заблокирован'}</p>
+                </div>
+            </div>
+        `;
+    } else {
+        window.location.href = '/login';
     }
 }
 
-function logout() {
-    fetch('/auth/logout', { method: 'POST', credentials: 'include' })
-        .then(() => window.location.href = '/');
+async function loadAthleteProfile() {
+    const response = await fetch('/athletes/my/profile-data', { credentials: 'include' });
+    if (response.ok) {
+        currentAthlete = await response.json();
+        const schoolName = currentAthlete.school_name || 'Не указана';
+        const coachName = currentAthlete.coach_name || 'Не указан';
+        
+        document.getElementById('athleteInfo').innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-calendar"></i> Дата рождения:</strong><br>${currentAthlete.birth_date ? new Date(currentAthlete.birth_date).toLocaleDateString() : 'Не указана'}</p>
+                    <p><strong><i class="fas fa-venus-mars"></i> Пол:</strong><br>${currentAthlete.gender === 'male' ? 'Мужской' : (currentAthlete.gender === 'female' ? 'Женский' : 'Не указан')}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-medal"></i> Разряд:</strong><br>${currentAthlete.rank || 'Не указан'}</p>
+                    <p><strong><i class="fas fa-school"></i> Школа:</strong><br>${schoolName}</p>
+                    <p><strong><i class="fas fa-chalkboard-user"></i> Тренер:</strong><br>${coachName}</p>
+                </div>
+            </div>
+        `;
+        
+        // Заполняем форму редактирования
+        document.getElementById('editBirthDate').value = currentAthlete.birth_date || '';
+        document.getElementById('editGender').value = currentAthlete.gender || '';
+        document.getElementById('editRank').value = currentAthlete.rank || '';
+    } else {
+        document.getElementById('athleteInfo').innerHTML = '<p class="text-muted text-center">Профиль спортсмена не найден</p>';
+    }
+}
+
+async function editAthleteProfile() {
+    if (currentAthlete) {
+        const modal = new bootstrap.Modal(document.getElementById('editProfileModal'));
+        modal.show();
+    }
+}
+
+async function saveAthleteProfile() {
+    const data = {
+        birth_date: document.getElementById('editBirthDate').value || null,
+        gender: document.getElementById('editGender').value || null,
+        rank: document.getElementById('editRank').value || null
+    };
+    
+    const response = await fetch('/athletes/my/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    });
+    
+    if (response.ok) {
+        alert('Профиль обновлен!');
+        bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
+        loadAthleteProfile();
+    } else {
+        alert('Ошибка обновления');
+    }
 }
 
 async function loadRecords() {
-    try {
-        const response = await fetch('/athletes/my/personal-bests', { credentials: 'include' });
-        if (!response.ok) throw new Error('Ошибка загрузки');
+    const response = await fetch('/athletes/my/personal-bests', { credentials: 'include' });
+    if (response.ok) {
         const records = await response.json();
-        
         if (records.length === 0) {
             document.getElementById('recordsList').innerHTML = '<p class="text-muted text-center py-3 mb-0">Нет личных рекордов. Добавьте свой первый рекорд!</p>';
             return;
         }
-        
-        const grouped = {};
-        records.forEach(record => {
-            const key = `${record.distance}м`;
-            if (!grouped[key]) grouped[key] = [];
-            grouped[key].push(record);
-        });
         
         const strokeNames = {
             'freestyle': 'Вольный стиль', 'breaststroke': 'Брасс',
             'backstroke': 'На спине', 'butterfly': 'Баттерфляй', 'medley': 'Комплекс'
         };
         
-        let html = '';
-        for (const [distance, items] of Object.entries(grouped)) {
-            html += `<h6 class="mt-3">${distance}</h6>`;
-            html += `<div class="table-responsive"><table class="table table-sm table-striped">
-                <thead><tr><th>Стиль</th><th>Время (сек)</th><th>Дата</th><th></th></tr></thead><tbody>`;
-            items.forEach(record => {
-                html += `
-                    <tr>
-                        <td>${strokeNames[record.stroke] || record.stroke}</td>
-                        <td><strong>${record.time_seconds}</strong></td>
-                        <td>${record.set_at ? new Date(record.set_at).toLocaleDateString() : '-'}</td>
-                        <td><button class="btn btn-sm btn-danger" onclick="deleteRecord(${record.id})"><i class="fas fa-trash"></i></button></td>
-                    </tr>
-                `;
-            });
-            html += `</tbody></table></div>`;
-        }
+        let html = '<div class="table-responsive"><table class="table table-sm table-striped">';
+        html += '<thead><tr><th>Дистанция</th><th>Стиль</th><th>Время (сек)</th><th>Дата</th><th></th></thead><tbody>';
+        
+        records.forEach(record => {
+            let dateStr = record.set_date || (record.set_at ? new Date(record.set_at).toLocaleDateString() : '-');
+            html += `
+                <tr>
+                    <td>${record.distance}м</td>
+                    <td>${strokeNames[record.stroke] || record.stroke}</td>
+                    <td><strong>${record.time_seconds}</strong></td>
+                    <td>${dateStr}</td>
+                    <td><button class="btn btn-sm btn-danger" onclick="deleteRecord(${record.id})"><i class="fas fa-trash"></i></button></td>
+                </tr>
+            `;
+        });
+        html += '</tbody></table></div>';
         document.getElementById('recordsList').innerHTML = html;
-    } catch (error) {
+    } else {
         document.getElementById('recordsList').innerHTML = '<p class="text-danger text-center py-3 mb-0">Ошибка загрузки рекордов</p>';
     }
 }
@@ -194,97 +259,64 @@ const form = document.getElementById('addRecordForm');
 if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
         const distance = document.getElementById('distance').value;
         const stroke = document.getElementById('stroke').value;
         const timeSeconds = document.getElementById('timeSeconds').value;
+        const setDate = document.getElementById('setDate').value;
         
         if (!distance || !stroke || !timeSeconds) {
-            alert('Заполните все поля');
+            alert('Заполните дистанцию, стиль и время');
             return;
         }
         
-        try {
-            const response = await fetch('/athletes/my/personal-bests', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    distance: parseInt(distance),
-                    stroke: stroke,
-                    time_seconds: parseFloat(timeSeconds)
-                }),
-                credentials: 'include'
-            });
-            
-            if (response.ok) {
-                document.getElementById('timeSeconds').value = '';
-                document.getElementById('distance').value = '';
-                document.getElementById('stroke').value = '';
-                alert('Рекорд добавлен!');
-                loadRecords();
-            } else {
-                const error = await response.json();
-                alert(error.detail || 'Ошибка добавления');
-            }
-        } catch (error) {
-            alert('Ошибка сети');
+        const data = {
+            distance: parseInt(distance),
+            stroke: stroke,
+            time_seconds: parseFloat(timeSeconds)
+        };
+        if (setDate) {
+            data.set_date = setDate;
+        }
+        
+        const response = await fetch('/athletes/my/personal-bests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            document.getElementById('timeSeconds').value = '';
+            document.getElementById('setDate').value = '';
+            document.getElementById('distance').value = '';
+            document.getElementById('stroke').value = '';
+            loadRecords();
+            alert('Рекорд добавлен!');
+        } else {
+            const error = await response.json();
+            alert(error.detail || 'Ошибка добавления');
         }
     });
 }
 
 window.deleteRecord = async function(recordId) {
     if (confirm('Удалить этот рекорд?')) {
-        try {
-            const response = await fetch(`/athletes/personal-bests/${recordId}`, {
-                method: 'DELETE',
-                credentials: 'include'
-            });
-            if (response.ok) {
-                alert('Рекорд удален');
-                loadRecords();
-            } else {
-                alert('Ошибка удаления');
-            }
-        } catch (error) {
-            alert('Ошибка сети');
+        const response = await fetch(`/athletes/personal-bests/${recordId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        if (response.ok) {
+            loadRecords();
+            alert('Рекорд удален');
+        } else {
+            alert('Ошибка удаления');
         }
     }
 };
 
-{% if current_user and (current_user.role.name == 'ATHLETE' or current_user.role.value == 'athlete') %}
-document.addEventListener('DOMContentLoaded', loadRecords);
-{% endif %}
+loadUser();
+loadAthleteProfile();
+loadRecords();
 </script>
 {% endblock %}
-<script>
-// ... существующий код ...
-
-// Функция удаления рекорда с CSRF токеном
-window.deleteRecord = async function(recordId) {
-    if (confirm('Удалить этот рекорд?')) {
-        // Получаем CSRF токен из cookie
-        const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
-        const csrfToken = csrfMatch ? csrfMatch[1] : '';
-        
-        try {
-            const response = await fetch(`/athletes/personal-bests/${recordId}`, {
-                method: 'DELETE',
-                credentials: 'include',
-                headers: {
-                    'X-CSRF-Token': csrfToken
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                alert('Рекорд удален');
-                loadRecords(); // Перезагружаем список
-            } else {
-                const error = await response.json();
-                alert(error.detail || 'Ошибка удаления');
-            }
-        } catch (error) {
-            alert('Ошибка сети');
-        }
-    }
-};
-</script>

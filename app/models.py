@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, date, date
 from typing import Optional, List
-from sqlalchemy import String, Integer, Boolean, DateTime, Enum, ForeignKey, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, Date, Enum, ForeignKey, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -309,22 +309,19 @@ class PersonalBest(Base):
         nullable=False,
         index=True,
     )
-    distance: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )  # 50, 100, 200, 400, 800, 1500
-    stroke: Mapped[str] = mapped_column(
-        String(20), nullable=False, index=True
-    )  # freestyle, breaststroke, backstroke, butterfly
+    distance: Mapped[int] = mapped_column(Integer, nullable=False)
+    stroke: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     time_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     set_at: Mapped[datetime] = mapped_column(
+
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    set_date: Mapped[date] = mapped_column(Date, nullable=True)
 
     athlete: Mapped["AthleteProfile"] = relationship(
         "AthleteProfile", back_populates="personal_bests"
     )
-
-
 class Competition(Base):
     __tablename__ = "competitions"
 
@@ -472,6 +469,8 @@ class Entry(Base):
     swim_event: Mapped["SwimEvent"] = relationship(
         "SwimEvent", back_populates="entries"
     )
+    set_date: Mapped[date] = mapped_column(Date, nullable=True)
+
     athlete: Mapped["AthleteProfile"] = relationship(
         "AthleteProfile", back_populates="entries"
     )
@@ -628,3 +627,19 @@ class PasswordResetToken(Base):
     )
 
     user: Mapped["User"] = relationship("User", backref="password_reset_tokens")
+
+class CompetitionSubscription(Base):
+    __tablename__ = "competition_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    competition_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    user: Mapped["User"] = relationship("User", backref="subscriptions")
+    competition: Mapped["Competition"] = relationship("Competition", backref="subscribers")
