@@ -27,10 +27,10 @@
                 <p><strong>Город:</strong> {{ school.city }}</p>
                 <p><strong>Адрес:</strong> {{ school.address }}</p>
                 {% if school.phone %}
-                <p><strong>Телефон:</strong> {{ school.phone }}</p>
+                <p><strong>Телефон:</strong> <a href="tel:{{ school.phone }}" class="text-decoration-none">{{ school.phone }}</a></p>
                 {% endif %}
                 {% if school.email %}
-                <p><strong>Email:</strong> {{ school.email }}</p>
+                <p><strong>Email:</strong> <a href="mailto:{{ school.email }}" class="text-decoration-none">{{ school.email }}</a></p>
                 {% endif %}
                 <p>{{ school.description }}</p>
                 

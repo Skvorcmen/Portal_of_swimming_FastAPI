@@ -79,11 +79,17 @@ class School(Base):
     city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
     address: Mapped[str] = mapped_column(String(500), nullable=True)  # Нынешний адрес
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
     # Социальные сети
     vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
     telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
     instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
     email: Mapped[str] = mapped_column(String(100), nullable=True)
     website: Mapped[str] = mapped_column(String(200), nullable=True)
     # Социальные сети
@@ -91,6 +97,9 @@ class School(Base):
     telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
     instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
 
     # ИЗОБРАЖЕНИЯ
     logo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Логотип
@@ -126,11 +135,17 @@ class Branch(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
     # Социальные сети
     vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
     telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
     instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
 
     # НОВОЕ ПОЛЕ - обложка филиала (если нет - берется от школы)
     cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
@@ -187,6 +202,15 @@ class CoachProfile(Base):
     specialization: Mapped[str] = mapped_column(String(200), nullable=True)
     is_head_coach: Mapped[bool] = mapped_column(Boolean, default=False)
     achievements: Mapped[str] = mapped_column(String(1000), nullable=True)
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+    contact_email: Mapped[str] = mapped_column(String(100), nullable=True)
+
+
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

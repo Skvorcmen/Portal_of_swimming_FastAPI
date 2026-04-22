@@ -18,7 +18,10 @@
             <div class="card-body">
                 <p><strong>Адрес:</strong> {{ branch.address }}</p>
                 {% if branch.phone %}
-                <p><strong>Телефон:</strong> {{ branch.phone }}</p>
+                <p><strong>Телефон:</strong> <a href="tel:{{ branch.phone }}" class="text-decoration-none">{{ branch.phone }}</a></p>
+                {% endif %}
+                {% if branch.email %}
+                <p><strong>Email:</strong> <a href="mailto:{{ branch.email }}">{{ branch.email }}</a></p>
                 {% endif %}
                 <p><strong>Школа:</strong> <a href="/schools/{{ school.id }}/page">{{ school.name }}</a></p>
                 

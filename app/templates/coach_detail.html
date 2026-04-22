@@ -23,6 +23,48 @@
                     <a href="/schools/{{ school.id }}/page">{{ school.name }}</a>
                 </p>
                 {% endif %}
+                
+                <!-- Контакты -->
+                <div class="mt-3 text-start">
+                    {% if coach.phone %}
+                    <p class="mb-2">
+                        <i class="fas fa-phone text-primary"></i> 
+                        <a href="tel:{{ coach.phone }}" class="text-decoration-none">{{ coach.phone }}</a>
+                    </p>
+                    {% endif %}
+                    {% if coach.contact_email %}
+                    <p class="mb-2">
+                        <i class="fas fa-envelope text-primary"></i> 
+                        <a href="mailto:{{ coach.contact_email }}" class="text-decoration-none">{{ coach.contact_email }}</a>
+                    </p>
+                    {% endif %}
+                </div>
+                
+                <!-- Социальные сети тренера -->
+                <div class="mt-3">
+                    <div class="d-flex justify-content-center gap-2">
+                        {% if coach.vk_url %}
+                        <a href="{{ coach.vk_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="fab fa-vk"></i>
+                        </a>
+                        {% endif %}
+                        {% if coach.telegram_url %}
+                        <a href="{{ coach.telegram_url }}" target="_blank" class="btn btn-sm btn-outline-info">
+                            <i class="fab fa-telegram"></i>
+                        </a>
+                        {% endif %}
+                        {% if coach.youtube_url %}
+                        <a href="{{ coach.youtube_url }}" target="_blank" class="btn btn-sm btn-outline-danger">
+                            <i class="fab fa-youtube"></i>
+                        </a>
+                        {% endif %}
+                        {% if coach.instagram_url %}
+                        <a href="{{ coach.instagram_url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>

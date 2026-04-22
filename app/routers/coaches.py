@@ -147,3 +147,84 @@ async def upload_coach_cover(
     await service.update_coach(coach_id, cover_url=url)
     
     return {"cover_url": url}
+
+@router.get("/{coach_id}/page")
+async def coach_page(
+    coach_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Страница профиля тренера"""
+    coach_service = CoachService(db)
+    school_service = SchoolService(db)
+    
+    coach = await coach_service.get_coach(coach_id)
+    if not coach:
+        raise HTTPException(status_code=404, detail="Coach not found")
+    
+    school = None
+    if coach.school_id:
+        school = await school_service.get_school(coach.school_id)
+    
+    # Получаем учеников тренера
+    from sqlalchemy import select
+    from app.models import AthleteProfile, User
+    
+    result = await db.execute(
+        select(AthleteProfile)
+        .options(selectinload(AthleteProfile.user))
+        .where(AthleteProfile.coach_id == coach_id)
+    )
+    athletes = result.scalars().all()
+    
+    return templates.TemplateResponse(
+        "coach_detail.html",
+        {
+            "request": request,
+            "coach": coach,
+            "school": school,
+            "athletes": athletes,
+            "now": datetime.now()
+        }
+    )
+
+@router.get("/{coach_id}/page")
+async def coach_detail_page(
+    coach_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Страница профиля тренера"""
+    from datetime import datetime
+    from sqlalchemy.orm import selectinload
+    from app.models import AthleteProfile, User
+    
+    coach_service = CoachService(db)
+    school_service = SchoolService(db)
+    
+    coach = await coach_service.get_coach(coach_id)
+    if not coach:
+        raise HTTPException(status_code=404, detail="Coach not found")
+    
+    school = None
+    if coach.school_id:
+        school = await school_service.get_school(coach.school_id)
+    
+    # Получаем учеников тренера
+    result = await db.execute(
+        select(AthleteProfile)
+        .options(selectinload(AthleteProfile.user))
+        .where(AthleteProfile.coach_id == coach_id)
+    )
+    athletes = result.scalars().all()
+    
+    return templates.TemplateResponse(
+        "coach_detail.html",
+        {
+            "request": request,
+            "coach": coach,
+            "school": school,
+            "athletes": athletes,
+            "now": datetime.now()
+        }
+    )
