@@ -21,6 +21,7 @@ class AuthService:
     def __init__(self, session: AsyncSession):
         self.user_repo = UserRepository(session)
         self.refresh_token_repo = RefreshTokenRepository(session)
+        self.session = session
 
     async def register_user(
         self,
@@ -75,7 +76,7 @@ class AuthService:
             raise InvalidRefreshTokenError("Invalid refresh token")
 
         now = datetime.now(timezone.utc)
-        if refresh_token.expires_at < now:  # ← Убрали .replace()
+        if refresh_token.expires_at < now:
             await self.refresh_token_repo.revoke_token(refresh_token.id)
             raise ExpiredRefreshTokenError("Refresh token expired")
 
@@ -102,15 +103,13 @@ class AuthService:
         if not user:
             return "reset_token_placeholder"
         
-        from app.repositories.password_reset_repository import PasswordResetRepository
-        self.password_reset_repo = PasswordResetRepository(self.user_repo.session)
+        self.password_reset_repo = PasswordResetRepository(self.session)
         token = await self.password_reset_repo.create_token(user.id)
         return token.token
 
     async def reset_password(self, token: str, new_password: str) -> bool:
         """Сброс пароля по токену."""
-        from app.repositories.password_reset_repository import PasswordResetRepository
-        self.password_reset_repo = PasswordResetRepository(self.user_repo.session)
+        self.password_reset_repo = PasswordResetRepository(self.session)
         
         reset_token = await self.password_reset_repo.get_valid_token(token)
         if not reset_token:
@@ -120,7 +119,6 @@ class AuthService:
         if not user:
             return False
         
-        from app.auth import get_password_hash
         hashed_password = get_password_hash(new_password)
         await self.user_repo.update(user.id, hashed_password=hashed_password)
         await self.password_reset_repo.mark_as_used(reset_token.id)
@@ -132,8 +130,6 @@ class AuthService:
 
     async def change_password(self, user_id: int, old_password: str, new_password: str) -> bool:
         """Смена пароля авторизованным пользователем."""
-        from app.auth import verify_password, get_password_hash
-        
         user = await self.user_repo.get_by_id(user_id)
         if not user or not verify_password(old_password, user.hashed_password):
             return False
@@ -145,3 +141,15 @@ class AuthService:
         await self.refresh_token_repo.revoke_all_user_tokens(user_id)
         
         return True
+
+    async def send_welcome_email(self, user_id: int) -> None:
+        """Отправить приветственное письмо"""
+        user = await self.user_repo.get_by_id(user_id)
+        if user and user.email:
+            from app.core.email import send_welcome_email
+            await send_welcome_email(user.email, user.username)
+
+    async def send_password_reset_email(self, email: str, token: str) -> None:
+        """Отправить письмо со ссылкой для сброса пароля"""
+        from app.core.email import send_password_reset_email
+        await send_password_reset_email(email, token)

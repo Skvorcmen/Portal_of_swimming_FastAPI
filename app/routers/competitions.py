@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from pydantic import BaseModel
 from datetime import datetime
-
+from app.core.cache import cached, delete_cache, clear_cache_pattern
 from app.database import get_db
 from app.services.competition_service import CompetitionService
 from app.auth import get_current_active_user
@@ -87,7 +87,6 @@ async def search_competitions(
     page: int = 1,
     service: CompetitionService = Depends(get_competition_service),
 ):
-    # Декодируем URL-encoded строки
     name = unquote(name)
     city = unquote(city)
     status = unquote(status)
@@ -109,7 +108,6 @@ async def search_competitions(
 async def get_active_competitions(
     service: CompetitionService = Depends(get_competition_service),
 ):
-    """Получить список активных соревнований"""
     return await service.get_active_competitions()
 
 
@@ -117,7 +115,6 @@ async def get_active_competitions(
 async def get_upcoming_competitions(
     service: CompetitionService = Depends(get_competition_service),
 ):
-    """Получить список предстоящих соревнований"""
     return await service.get_upcoming_competitions()
 
 
@@ -127,7 +124,6 @@ async def create_competition(
     current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
     service: CompetitionService = Depends(get_competition_service),
 ):
-    """Создать новое соревнование (только ADMIN, SECRETARY)"""
     competition = await service.create_competition(
         name=competition_data.name,
         description=competition_data.description,
@@ -143,21 +139,21 @@ async def create_competition(
 
 
 @router.get("/", response_model=List[CompetitionResponse])
+@cached(expire=60, key_prefix="competitions_list")
 async def get_all_competitions(
     skip: int = 0,
     limit: int = 100,
     service: CompetitionService = Depends(get_competition_service),
 ):
-    """Получить список всех соревнований"""
     return await service.get_all_competitions(skip, limit)
 
 
 @router.get("/{competition_id}", response_model=CompetitionResponse)
+@cached(expire=300, key_prefix="competition_detail")
 async def get_competition(
     competition_id: int,
     service: CompetitionService = Depends(get_competition_service),
 ):
-    """Получить соревнование по ID"""
     competition = await service.get_competition(competition_id)
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
@@ -171,8 +167,6 @@ async def update_competition(
     current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
     service: CompetitionService = Depends(get_competition_service),
 ):
-    """Обновить соревнование (только ADMIN, SECRETARY)"""
-    # Убираем None значения
     update_data = {
         k: v for k, v in competition_data.model_dump().items() if v is not None
     }
@@ -182,6 +176,11 @@ async def update_competition(
     competition = await service.update_competition(competition_id, **update_data)
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
+
+    # Очищаем кэш
+    await clear_cache_pattern("competition_list*")
+    await clear_cache_pattern(f"competition_detail:{competition_id}*")
+
     return competition
 
 
@@ -191,7 +190,6 @@ async def delete_competition(
     current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
     service: CompetitionService = Depends(get_competition_service),
 ):
-    """Удалить соревнование (только ADMIN, SECRETARY)"""
     deleted = await service.delete_competition(competition_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Competition not found")
@@ -217,7 +215,6 @@ async def download_start_list(
     competition_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Скачать предстартовый протокол (PDF)"""
     pdf_buffer = await PDFService.generate_start_list(competition_id, db)
     return StreamingResponse(
         pdf_buffer,
@@ -233,12 +230,46 @@ async def download_results_protocol(
     competition_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Скачать итоговый протокол (PDF)"""
     pdf_buffer = await PDFService.generate_results_protocol(competition_id, db)
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename=results_{competition_id}.pdf"
+        },
+    )
+
+
+@router.get("/cached-list")
+@cached(expire=60, key_prefix="competitions_list")
+async def get_all_competitions_cached(
+    skip: int = 0,
+    limit: int = 100,
+    service: CompetitionService = Depends(get_competition_service),
+):
+    return await service.get_all_competitions(skip, limit)
+
+
+@router.get("/test-cache")
+@cached(expire=30, key_prefix="test")
+async def test_cache():
+    import time
+    return {"timestamp": time.time(), "message": "Cached response"}
+
+
+@router.get("/{competition_id}/results.csv")
+async def download_results_csv(
+    competition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Скачать результаты соревнования в CSV"""
+    from app.services.csv_service import CSVService
+    
+    csv_buffer = await CSVService.export_competition_results(competition_id, db)
+    return StreamingResponse(
+        csv_buffer,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=results_{competition_id}.csv"
         },
     )

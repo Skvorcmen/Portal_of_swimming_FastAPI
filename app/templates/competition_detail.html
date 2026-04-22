@@ -18,7 +18,9 @@
                         <i class="fas fa-file-pdf"></i> Предстартовый протокол
                     </a>
                     <a href="/competitions/{{ competition.id }}/results.pdf" class="btn btn-success">
-                        <i class="fas fa-file-pdf"></i> Итоговый протокол
+                        <i class="fas fa-file-pdf"></i> Итоговый протокол</a>
+                    <a href="/competitions/{{ competition.id }}/results.csv" class="btn btn-info">
+                        <i class="fas fa-file-csv"></i> CSV результаты
                     </a>
                 </div>
             </div>
@@ -124,5 +126,28 @@ function deleteCompetition(competitionId) {
             alert('Ошибка при удалении');
         });
     }
+}
+</script>
+<script>
+// Дополняем существующий chatComponent
+function chatComponentWithNotifications(room) {
+    const component = chatComponent(room);
+    
+    // Сохраняем оригинальный sendMessage
+    const originalSend = component.sendMessage;
+    
+    // Переопределяем sendMessage с уведомлением
+    component.sendMessage = function() {
+        if (this.newMessage.trim() && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            const message = this.newMessage.trim();
+            this.ws.send(JSON.stringify({ message: message }));
+            showSuccess('✉️ Сообщение отправлено');
+            this.newMessage = '';
+        } else if (!this.connected) {
+            showError('❌ Нет соединения с чатом');
+        }
+    };
+    
+    return component;
 }
 </script>

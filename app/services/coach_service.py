@@ -2,12 +2,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from datetime import datetime
 from app.repositories.coach_repository import CoachRepository
+from app.repositories.school_repository import SchoolRepository
 from app.models import CoachProfile
+from fastapi import HTTPException, status
 
 
 class CoachService:
     def __init__(self, session: AsyncSession):
+        self.session = session
         self.repo = CoachRepository(session)
+        self.school_repo = SchoolRepository(session)
 
     async def get_coach(self, coach_id: int) -> Optional[CoachProfile]:
         return await self.repo.get_by_id(coach_id)
@@ -31,6 +35,15 @@ class CoachService:
         photo_url: str = None,
         birth_date: datetime = None,
     ) -> CoachProfile:
+        # Проверяем, существует ли школа
+        if school_id:
+            school = await self.school_repo.get_by_id(school_id)
+            if not school:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"School with id {school_id} not found"
+                )
+        
         return await self.repo.create(
             user_id=user_id,
             school_id=school_id,
@@ -43,3 +56,19 @@ class CoachService:
             photo_url=photo_url,
             birth_date=birth_date,
         )
+
+    async def get_coach_athletes(self, coach_id: int) -> List:
+        """Получить всех учеников тренера"""
+        from sqlalchemy import select
+        from app.models import AthleteProfile, User
+        
+        result = await self.session.execute(
+            select(AthleteProfile)
+            .options(selectinload(AthleteProfile.user))
+            .where(AthleteProfile.coach_id == coach_id)
+        )
+        return result.scalars().all()
+
+    async def update_coach(self, coach_id: int, **kwargs) -> Optional[CoachProfile]:
+        """Обновить данные тренера"""
+        return await self.repo.update(coach_id, **kwargs)

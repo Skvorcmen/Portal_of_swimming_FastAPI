@@ -71,20 +71,37 @@ class School(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     full_name: Mapped[str] = mapped_column(String(500), nullable=True)
-    description: Mapped[str] = mapped_column(String(2000), nullable=True)  # ← добавить
-    logo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # ← добавить
-    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)  # ← добавить
+    description: Mapped[str] = mapped_column(String(2000), nullable=True)
+
+    # НОВЫЕ ПОЛЯ
+    founder: Mapped[str] = mapped_column(String(200), nullable=True)  # Основатель
+    founded_year: Mapped[int] = mapped_column(Integer, nullable=True)  # Год основания
     city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
-    address: Mapped[str] = mapped_column(String(500), nullable=True)
+    address: Mapped[str] = mapped_column(String(500), nullable=True)  # Нынешний адрес
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     email: Mapped[str] = mapped_column(String(100), nullable=True)
     website: Mapped[str] = mapped_column(String(200), nullable=True)
-    founded_year: Mapped[int] = mapped_column(Integer, nullable=True)  # ← добавить
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+
+    # ИЗОБРАЖЕНИЯ
+    logo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Логотип
+    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Обложка школы
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
+    # Связи
     branches: Mapped[list["Branch"]] = relationship(
         "Branch", back_populates="school", cascade="all, delete-orphan"
     )
@@ -109,6 +126,15 @@ class Branch(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+
+    # НОВОЕ ПОЛЕ - обложка филиала (если нет - берется от школы)
+    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -147,17 +173,20 @@ class CoachProfile(Base):
         index=True,
     )
 
-    photo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # ← добавить
-    bio: Mapped[str] = mapped_column(String(1000), nullable=True)  # ← добавить
-    birth_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )  # ← добавить
+    # ИЗОБРАЖЕНИЯ
+    photo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Аватар тренера
+    cover_url: Mapped[str] = mapped_column(
+        String(500), nullable=True
+    )  # Обложка (берется от школы если не указана)
+
+    bio: Mapped[str] = mapped_column(String(1000), nullable=True)
+    birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     qualification: Mapped[str] = mapped_column(String(100), nullable=True)
     experience_years: Mapped[int] = mapped_column(Integer, default=0)
     specialization: Mapped[str] = mapped_column(String(200), nullable=True)
     is_head_coach: Mapped[bool] = mapped_column(Boolean, default=False)
-    achievements: Mapped[str] = mapped_column(String(1000), nullable=True)  # ← добавить
+    achievements: Mapped[str] = mapped_column(String(1000), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -207,9 +236,14 @@ class AthleteProfile(Base):
         nullable=True,
         index=True,
     )
-    entries: Mapped[list["Entry"]] = relationship(
-        "Entry", back_populates="athlete", cascade="all, delete-orphan"
-    )
+
+    # ИЗОБРАЖЕНИЯ
+    photo_url: Mapped[str] = mapped_column(
+        String(500), nullable=True
+    )  # Аватар спортсмена
+    cover_url: Mapped[str] = mapped_column(
+        String(500), nullable=True
+    )  # Обложка (берется от школы если не указана)
 
     birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     gender: Mapped[str] = mapped_column(String(10), nullable=True, index=True)
@@ -222,6 +256,7 @@ class AthleteProfile(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
+    # Связи
     user: Mapped["User"] = relationship("User", back_populates="athlete_profile")
     school: Mapped[Optional["School"]] = relationship(
         "School", back_populates="athletes"
@@ -234,6 +269,9 @@ class AthleteProfile(Base):
     )
     personal_bests: Mapped[list["PersonalBest"]] = relationship(
         "PersonalBest", back_populates="athlete", cascade="all, delete-orphan"
+    )
+    entries: Mapped[list["Entry"]] = relationship(
+        "Entry", back_populates="athlete", cascade="all, delete-orphan"
     )
 
 

@@ -22,4 +22,5 @@ pytest-asyncio==0.24.0
 httpx==0.28.1
 factory-boy==3.3.1
 faker==30.0.0
-slowapi==0.1.9
+slowapi==0.1.9redis==5.0.8
+aiosmtplib==3.0.2

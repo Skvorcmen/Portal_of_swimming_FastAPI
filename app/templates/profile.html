@@ -2,49 +2,109 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-md-6 mx-auto">
-        <div class="card">
+    <div class="col-md-8 mx-auto">
+        <!-- Информация о пользователе -->
+        <div class="card mb-4">
             <div class="card-body">
                 <h3 class="card-title text-center mb-4">Личный кабинет</h3>
 
                 <div x-data="profile()" x-init="loadProfile()">
                     <div x-show="loading" class="text-center">Загрузка...</div>
-
                     <div x-show="!loading && error" class="alert alert-danger" x-text="error"></div>
 
                     <div x-show="!loading && !error">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">ID</label>
-                            <p class="form-control-plaintext" x-text="user.id"></p>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Email</label>
-                            <p class="form-control-plaintext" x-text="user.email"></p>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Имя пользователя</label>
-                            <p class="form-control-plaintext" x-text="user.username"></p>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Полное имя</label>
-                            <p class="form-control-plaintext" x-text="user.full_name"></p>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Роль</label>
-                            <p class="form-control-plaintext" x-text="user.role"></p>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Дата регистрации</label>
-                            <p class="form-control-plaintext" x-text="new Date(user.created_at).toLocaleString()"></p>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">ID</label>
+                                    <p class="form-control-plaintext" x-text="user.id"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Email</label>
+                                    <p class="form-control-plaintext" x-text="user.email"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Имя пользователя</label>
+                                    <p class="form-control-plaintext" x-text="user.username"></p>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Полное имя</label>
+                                    <p class="form-control-plaintext" x-text="user.full_name"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Роль</label>
+                                    <p class="form-control-plaintext" x-text="user.role"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Дата регистрации</label>
+                                    <p class="form-control-plaintext" x-text="new Date(user.created_at).toLocaleString()"></p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div class="d-grid gap-2 mt-3">
-                    <a href="/" class="btn btn-secondary">На главную</a>
-                    <button onclick="logout()" class="btn btn-danger">Выйти</button>
+        <!-- Личные рекорды - проверяем role.name или role.value -->
+        {% if current_user and (current_user.role.name == 'ATHLETE' or current_user.role.value == 'athlete') %}
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-medal"></i> Мои личные рекорды</h5>
+            </div>
+            <div class="card-body">
+                <form id="addRecordForm" class="mb-4 p-3 bg-light rounded">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small">Дистанция</label>
+                            <select class="form-select form-select-sm" id="distance" required>
+                                <option value="">Выберите</option>
+                                <option value="50">50 метров</option>
+                                <option value="100">100 метров</option>
+                                <option value="200">200 метров</option>
+                                <option value="400">400 метров</option>
+                                <option value="800">800 метров</option>
+                                <option value="1500">1500 метров</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Стиль</label>
+                            <select class="form-select form-select-sm" id="stroke" required>
+                                <option value="">Выберите</option>
+                                <option value="freestyle">Вольный стиль</option>
+                                <option value="breaststroke">Брасс</option>
+                                <option value="backstroke">На спине</option>
+                                <option value="butterfly">Баттерфляй</option>
+                                <option value="medley">Комплекс</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Время (секунды)</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="timeSeconds" placeholder="Например: 25.5" required>
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <div id="recordsList">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+                        <span class="ms-2">Загрузка...</span>
+                    </div>
                 </div>
             </div>
+        </div>
+        {% endif %}
+
+        <div class="d-grid gap-2 mt-3">
+            <a href="/" class="btn btn-secondary">На главную</a>
+            <button onclick="logout()" class="btn btn-danger">Выйти</button>
         </div>
     </div>
 </div>
@@ -59,17 +119,14 @@ function profile() {
         async loadProfile() {
             this.loading = true;
             try {
-                const response = await fetch('/auth/me', {
-                    credentials: 'include'
-                });
-
+                const response = await fetch('/auth/me', { credentials: 'include' });
                 if (response.status === 401) {
                     window.location.href = '/login';
                     return;
                 }
-
                 if (response.ok) {
                     this.user = await response.json();
+                    console.log('User loaded:', this.user);
                 } else {
                     this.error = 'Не удалось загрузить профиль';
                 }
@@ -83,20 +140,151 @@ function profile() {
 }
 
 function logout() {
-    const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1];
-    fetch('/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-            'X-CSRF-Token': csrfToken || ''
+    fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+        .then(() => window.location.href = '/');
+}
+
+async function loadRecords() {
+    try {
+        const response = await fetch('/athletes/my/personal-bests', { credentials: 'include' });
+        if (!response.ok) throw new Error('Ошибка загрузки');
+        const records = await response.json();
+        
+        if (records.length === 0) {
+            document.getElementById('recordsList').innerHTML = '<p class="text-muted text-center py-3 mb-0">Нет личных рекордов. Добавьте свой первый рекорд!</p>';
+            return;
         }
-    })
-    .then(() => {
-        window.location.href = '/';
-    })
-    .catch(() => {
-        window.location.href = '/';
+        
+        const grouped = {};
+        records.forEach(record => {
+            const key = `${record.distance}м`;
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(record);
+        });
+        
+        const strokeNames = {
+            'freestyle': 'Вольный стиль', 'breaststroke': 'Брасс',
+            'backstroke': 'На спине', 'butterfly': 'Баттерфляй', 'medley': 'Комплекс'
+        };
+        
+        let html = '';
+        for (const [distance, items] of Object.entries(grouped)) {
+            html += `<h6 class="mt-3">${distance}</h6>`;
+            html += `<div class="table-responsive"><table class="table table-sm table-striped">
+                <thead><tr><th>Стиль</th><th>Время (сек)</th><th>Дата</th><th></th></tr></thead><tbody>`;
+            items.forEach(record => {
+                html += `
+                    <tr>
+                        <td>${strokeNames[record.stroke] || record.stroke}</td>
+                        <td><strong>${record.time_seconds}</strong></td>
+                        <td>${record.set_at ? new Date(record.set_at).toLocaleDateString() : '-'}</td>
+                        <td><button class="btn btn-sm btn-danger" onclick="deleteRecord(${record.id})"><i class="fas fa-trash"></i></button></td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table></div>`;
+        }
+        document.getElementById('recordsList').innerHTML = html;
+    } catch (error) {
+        document.getElementById('recordsList').innerHTML = '<p class="text-danger text-center py-3 mb-0">Ошибка загрузки рекордов</p>';
+    }
+}
+
+const form = document.getElementById('addRecordForm');
+if (form) {
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const distance = document.getElementById('distance').value;
+        const stroke = document.getElementById('stroke').value;
+        const timeSeconds = document.getElementById('timeSeconds').value;
+        
+        if (!distance || !stroke || !timeSeconds) {
+            alert('Заполните все поля');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/athletes/my/personal-bests', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    distance: parseInt(distance),
+                    stroke: stroke,
+                    time_seconds: parseFloat(timeSeconds)
+                }),
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                document.getElementById('timeSeconds').value = '';
+                document.getElementById('distance').value = '';
+                document.getElementById('stroke').value = '';
+                alert('Рекорд добавлен!');
+                loadRecords();
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Ошибка добавления');
+            }
+        } catch (error) {
+            alert('Ошибка сети');
+        }
     });
 }
+
+window.deleteRecord = async function(recordId) {
+    if (confirm('Удалить этот рекорд?')) {
+        try {
+            const response = await fetch(`/athletes/personal-bests/${recordId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+            if (response.ok) {
+                alert('Рекорд удален');
+                loadRecords();
+            } else {
+                alert('Ошибка удаления');
+            }
+        } catch (error) {
+            alert('Ошибка сети');
+        }
+    }
+};
+
+{% if current_user and (current_user.role.name == 'ATHLETE' or current_user.role.value == 'athlete') %}
+document.addEventListener('DOMContentLoaded', loadRecords);
+{% endif %}
 </script>
 {% endblock %}
+<script>
+// ... существующий код ...
+
+// Функция удаления рекорда с CSRF токеном
+window.deleteRecord = async function(recordId) {
+    if (confirm('Удалить этот рекорд?')) {
+        // Получаем CSRF токен из cookie
+        const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
+        const csrfToken = csrfMatch ? csrfMatch[1] : '';
+        
+        try {
+            const response = await fetch(`/athletes/personal-bests/${recordId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+                headers: {
+                    'X-CSRF-Token': csrfToken
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                alert('Рекорд удален');
+                loadRecords(); // Перезагружаем список
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Ошибка удаления');
+            }
+        } catch (error) {
+            alert('Ошибка сети');
+        }
+    }
+};
+</script>

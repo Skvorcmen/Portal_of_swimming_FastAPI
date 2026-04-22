@@ -68,7 +68,15 @@ async def register(
             full_name=user_data.full_name,
             role=user_data.role,
         )
+        print(f"🔵 DEBUG: About to send welcome email to user {user.id}")
+
+        await auth_service.send_welcome_email(user.id)
+        print(f"🟢 DEBUG: Welcome email sent")
+
         return user
+
+        # Отправляем приветственное письмо
+
     except UserAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -187,7 +195,10 @@ async def forgot_password(
 ):
     """Запрос на сброс пароля"""
     token = await auth_service.request_password_reset(data.email)
-    return {"message": "If email exists, reset link sent", "token": token}
+    await auth_service.send_password_reset_email(data.email, token)
+    # Отправляем письмо со ссылкой для сброса
+
+    return {"message": "If email exists, reset link sent"}
 
 
 @router.post("/reset-password")

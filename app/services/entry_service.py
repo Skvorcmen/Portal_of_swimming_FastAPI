@@ -77,15 +77,15 @@ class EntryService:
         for row_idx, row in enumerate(
             ws.iter_rows(min_row=2, values_only=True), start=2
         ):
-            swim_event_id = row[0]
-            athlete_id = row[1]
-            entry_time = row[2]
-            status = row[3] if len(row) > 3 else "pending"
-
-            if not swim_event_id or not athlete_id:
-                continue
-
             try:
+                swim_event_id = row[0]
+                athlete_id = row[1]
+                entry_time = row[2]
+                status = row[3] if len(row) > 3 else "pending"
+
+                if not swim_event_id or not athlete_id:
+                    continue
+
                 swim_event_id = int(swim_event_id)
                 athlete_id = int(athlete_id)
                 entry_time = float(entry_time) if entry_time else None
@@ -103,8 +103,10 @@ class EntryService:
                 entries_data.append(entry)
             except (ValueError, TypeError) as e:
                 errors.append(f"Row {row_idx}: Invalid data - {str(e)}")
+                continue  # Продолжаем со следующей строкой
             except Exception as e:
                 errors.append(f"Row {row_idx}: Database error - {str(e)}")
+                continue  # Продолжаем со следующей строкой
 
         return {
             "message": f"Successfully created {len(entries_data)} entries",

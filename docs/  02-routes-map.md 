@@ -1,0 +1,79 @@
+# Карта роутов — Swimming Portal
+
+## Публичные страницы (без авторизации)
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET / | index.html | Главная страница |
+| GET /login | login.html | Страница входа |
+| GET /register | register.html | Страница регистрации |
+| GET /live | live.html | Live результаты |
+
+## Профиль
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET /profile | profile.html | Личный кабинет |
+
+## Соревнования
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET /competitions/page | competitions_list.html | Список соревнований |
+| GET /competitions/search | partials/competition_items.html | Поиск (HTMX) |
+| GET /competitions/{id}/page | competition_detail.html | Детали соревнования |
+| GET /competitions/{id}/start-list.pdf | — | PDF стартовый лист |
+| GET /competitions/{id}/results.pdf | — | PDF результаты |
+| GET /competitions/{id}/results.csv | — | CSV результаты |
+
+## API соревнований
+| URL | Метод | Роль | Описание |
+|-----|-------|------|----------|
+| /competitions/ | GET | all | Список (JSON) |
+| /competitions/ | POST | admin/secretary | Создать |
+| /competitions/{id} | GET | all | Детали (JSON) |
+| /competitions/{id} | PUT | admin/secretary | Обновить |
+| /competitions/{id} | DELETE | admin/secretary | Удалить |
+| /competitions/active | GET | all | Активные |
+| /competitions/upcoming | GET | all | Предстоящие |
+
+## Школы
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET /schools/ | schools_list.html | Список школ |
+| GET /schools/{id} | school_detail.html | Детали школы |
+
+## Тренеры
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET /coaches/{id} | coach_detail.html | Профиль тренера |
+| GET /coach-dashboard | coach_dashboard.html | Дашборд тренера |
+| GET /coach/{id}/student/{athlete_id} | coach_student_detail.html | Ученик тренера |
+
+## Спортсмены
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET /athletes/{id} | athlete_detail.html | Профиль спортсмена |
+
+## Новости и статьи
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET /news/ | news_list.html | Список новостей |
+| GET /news/{id} | news_detail.html | Детали новости |
+
+## Филиалы
+| URL | Шаблон | Описание |
+|-----|--------|----------|
+| GET /branches/{id} | branch_detail.html | Детали филиала |
+
+## Auth API
+| URL | Метод | Описание |
+|-----|-------|----------|
+| /auth/register | POST | Регистрация |
+| /auth/login | POST | Вход |
+| /auth/logout | POST | Выход |
+| /auth/refresh | POST | Обновить токен |
+| /auth/reset-password | POST | Сброс пароля |
+
+## Системные
+| URL | Описание |
+|-----|----------|
+| GET /health | Проверка работоспособности |
+| GET /live | Live результаты (WebSocket) |

@@ -56,3 +56,17 @@ class SchoolService:
 
     async def delete_school(self, school_id: int) -> bool:
         return await self.repo.delete(school_id)
+
+    async def create_branch(self, school_id: int, name: str, address: str, phone: str = None):
+        from app.models import Branch
+        branch = Branch(school_id=school_id, name=name, address=address, phone=phone)
+        self.session.add(branch)
+        await self.session.commit()
+        await self.session.refresh(branch)
+        return branch
+
+    async def get_branches(self, school_id: int):
+        from app.models import Branch
+        from sqlalchemy import select
+        result = await self.session.execute(select(Branch).where(Branch.school_id == school_id))
+        return result.scalars().all()

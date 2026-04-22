@@ -34,6 +34,8 @@
                     <li class="nav-item"><a class="nav-link" href="/live"><i class="fas fa-chart-line"></i> Live</a></li>
                     <li class="nav-item"><a class="nav-link" href="/login">Вход</a></li>
                     <li class="nav-item"><a class="nav-link" href="/register">Регистрация</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/profile">Профиль</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/coach/dashboard"><i class="fas fa-chalkboard-user"></i> Мои ученики</a></li>
                 </ul>
             </div>
         </div>
@@ -41,37 +43,52 @@
     <main class="container mt-4">
         {% block content %}{% endblock %}
     </main>
-</body>
-</html>
-
-<!-- Глобальное модальное окно подтверждения -->
-<div x-data="{ showModal: false, modalMessage: '', modalAction: null }" 
-     x-init="window.showConfirm = (msg, callback) => { modalMessage = msg; modalAction = callback; showModal = true; }">
-    <div x-show="showModal" 
-         class="modal fade show" 
-         style="display: block; background-color: rgba(0,0,0,0.5); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999;"
-         @click.away="showModal = false">
-        <div class="modal-dialog modal-dialog-centered" style="margin-top: 20%;">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title">Подтверждение действия</h5>
-                    <button type="button" class="btn-close btn-close-white" @click="showModal = false"></button>
-                </div>
-                <div class="modal-body">
-                    <p x-text="modalMessage"></p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @click="showModal = false">Отмена</button>
-                    <button type="button" class="btn btn-danger" @click="modalAction(); showModal = false">Подтвердить</button>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Toast Notifications -->
+    <script src="/static/js/toast.js"></script>
+    
+    <!-- Global confirmation modal -->
+    <div x-data="{ showModal: false, modalMessage: '', modalAction: null }" 
+         x-init="window.showConfirm = (msg, callback) => { modalMessage = msg; modalAction = callback; showModal = true; }">
+        <div x-show="showModal" 
+             class="modal fade show" 
+             style="display: block; background-color: rgba(0,0,0,0.5); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999;"
+             @click.away="showModal = false">
+            <div class="modal-dialog modal-dialog-centered" style="margin-top: 20%;">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">Подтверждение действия</h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showModal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p x-text="modalMessage"></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @click="showModal = false">Отмена</button>
+                        <button type="button" class="btn btn-danger" @click="modalAction(); showModal = false">Подтвердить</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-
-<script>
-function getToken() {
-    const match = document.cookie.match(/access_token=([^;]+)/);
-    return match ? match[1] : null;
-}
-</script>
+    
+    <script>
+    function getToken() {
+        const match = document.cookie.match(/access_token=([^;]+)/);
+        return match ? match[1] : null;
+    }
+    
+    // Проверяем, что уведомления загружены
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof window.showSuccess === 'function') {
+            console.log('✅ Toast notifications ready');
+        } else {
+            console.warn('⚠️ Toast notifications not loaded');
+        }
+    });
+    </script>
+</body>
+</html>

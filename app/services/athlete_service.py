@@ -56,9 +56,23 @@ class AthleteService:
         stroke: str,
         time_seconds: float,
     ) -> PersonalBest:
+        """Добавить личный рекорд"""
         return await self.pb_repo.create(
             athlete_id=athlete_id,
             distance=distance,
             stroke=stroke,
             time_seconds=time_seconds,
         )
+    
+    async def get_personal_bests(self, athlete_id: int) -> List[PersonalBest]:
+        """Получить все личные рекорды спортсмена"""
+        return await self.pb_repo.get_by_athlete(athlete_id)
+    
+    async def delete_personal_best(self, pb_id: int) -> bool:
+        """Удалить личный рекорд"""
+        return await self.pb_repo.delete(pb_id)
+
+
+    async def get_personal_best(self, pb_id: int) -> Optional[PersonalBest]:
+        """Получить личный рекорд по ID"""
+        return await self.pb_repo.get_by_id(pb_id)

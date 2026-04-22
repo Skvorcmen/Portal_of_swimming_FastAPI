@@ -11,7 +11,7 @@ from app.services.school_service import SchoolService
 from app.services.coach_service import CoachService
 from app.models import User, UserRole
 from app.core.dependencies import require_role
-from app.auth import get_current_active_user
+from app.auth import get_current_user_optional_cookie, get_current_active_user
 
 router = APIRouter(prefix="/athletes", tags=["athletes"])
 templates = Jinja2Templates(directory="app/templates")
@@ -28,6 +28,8 @@ def get_school_service(db: AsyncSession = Depends(get_db)) -> SchoolService:
 def get_coach_service(db: AsyncSession = Depends(get_db)) -> CoachService:
     return CoachService(db)
 
+
+# ===== ЛИЧНЫЕ РЕКОРДЫ =====
 
 class PersonalBestCreate(BaseModel):
     distance: int
@@ -47,8 +49,71 @@ class PersonalBestResponse(BaseModel):
         from_attributes = True
 
 
-# Страница деталей спортсмена
+# ===== ЭНДПОИНТЫ ДЛЯ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ =====
+# Используем get_current_user_optional_cookie для поддержки cookie
 
+@router.get("/my/personal-bests")
+async def get_my_personal_bests(
+    current_user: User = Depends(get_current_user_optional_cookie),
+    service: AthleteService = Depends(get_athlete_service),
+):
+    """Получить личные рекорды текущего пользователя-спортсмена"""
+    if not current_user or current_user.role != UserRole.ATHLETE:
+        raise HTTPException(status_code=401, detail="Not authenticated or not athlete")
+    
+    athlete = await service.get_athlete_by_user_id(current_user.id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete profile not found")
+    
+    pbs = await service.get_personal_bests(athlete.id)
+    return pbs
+
+
+@router.post("/my/personal-bests", response_model=PersonalBestResponse)
+async def add_my_personal_best(
+    data: PersonalBestCreate,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    service: AthleteService = Depends(get_athlete_service),
+):
+    """Добавить личный рекорд для текущего пользователя-спортсмена"""
+    if not current_user or current_user.role != UserRole.ATHLETE:
+        raise HTTPException(status_code=401, detail="Not authenticated or not athlete")
+    
+    athlete = await service.get_athlete_by_user_id(current_user.id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete profile not found")
+    
+    pb = await service.add_personal_best(
+        athlete_id=athlete.id,
+        distance=data.distance,
+        stroke=data.stroke,
+        time_seconds=data.time_seconds,
+    )
+    return pb
+
+
+@router.get("/my/profile")
+async def my_profile(
+    request: Request,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    athlete_service: AthleteService = Depends(get_athlete_service),
+):
+    """Страница "Мои рекорды" для авторизованного спортсмена"""
+    if not current_user or current_user.role != UserRole.ATHLETE:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    athlete = await athlete_service.get_athlete_by_user_id(current_user.id)
+    if not athlete:
+        return templates.TemplateResponse(
+            "athlete_no_profile.html", {"request": request}
+        )
+    
+    return templates.TemplateResponse(
+        "athlete_my_profile.html", {"request": request, "athlete": athlete}
+    )
+
+
+# ===== ЭНДПОИНТЫ ДЛЯ ПРОСМОТРА ДРУГИХ СПОРТСМЕНОВ =====
 
 @router.get("/{athlete_id}/page")
 async def athlete_detail_page(
@@ -61,20 +126,20 @@ async def athlete_detail_page(
     athlete = await athlete_service.get_athlete_with_details(athlete_id)
     if not athlete:
         raise HTTPException(status_code=404, detail="Athlete not found")
-
+    
     school = None
     if athlete.school_id:
         school = await school_service.get_school(athlete.school_id)
-
+    
     coach = None
     if athlete.coach_id:
         coach = await coach_service.get_coach(athlete.coach_id)
-
+    
     personal_bests = {}
     for pb in athlete.personal_bests:
         key = f"{pb.distance}м {pb.stroke}"
         personal_bests[key] = pb
-
+    
     return templates.TemplateResponse(
         "athlete_detail.html",
         {
@@ -83,12 +148,11 @@ async def athlete_detail_page(
             "school": school,
             "coach": coach,
             "personal_bests": personal_bests,
-            "now": datetime.now(),  # ← Добавить эту строку
+            "now": datetime.now(),
         },
     )
 
 
-# API для получения спортсмена
 @router.get("/{athlete_id}")
 async def get_athlete(
     athlete_id: int,
@@ -100,25 +164,23 @@ async def get_athlete(
     return athlete
 
 
-# Добавление личного рекорда
 @router.post("/{athlete_id}/personal-bests", response_model=PersonalBestResponse)
 async def add_personal_best(
     athlete_id: int,
     data: PersonalBestCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user_optional_cookie),
     service: AthleteService = Depends(get_athlete_service),
 ):
-    # Проверка, что спортсмен принадлежит текущему пользователю или пользователь админ
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     athlete = await service.get_athlete(athlete_id)
     if not athlete:
         raise HTTPException(status_code=404, detail="Athlete not found")
-
-    if athlete.user_id != current_user.id and current_user.role not in [
-        UserRole.ADMIN,
-        UserRole.COACH,
-    ]:
+    
+    if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
         raise HTTPException(status_code=403, detail="Not authorized")
-
+    
     pb = await service.add_personal_best(
         athlete_id=athlete_id,
         distance=data.distance,
@@ -128,19 +190,83 @@ async def add_personal_best(
     return pb
 
 
-# Страница "Мои рекорды" для авторизованного спортсмена
-@router.get("/my/profile")
-async def my_profile(
-    request: Request,
-    current_user: User = Depends(get_current_active_user),
-    athlete_service: AthleteService = Depends(get_athlete_service),
-):
-    athlete = await athlete_service.get_athlete_by_user_id(current_user.id)
-    if not athlete:
-        return templates.TemplateResponse(
-            "athlete_no_profile.html", {"request": request}
-        )
 
-    return templates.TemplateResponse(
-        "athlete_my_profile.html", {"request": request, "athlete": athlete}
-    )
+@router.delete("/personal-bests/{pb_id}")
+async def delete_personal_best(
+    pb_id: int,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    service: AthleteService = Depends(get_athlete_service),
+):
+    """Удалить личный рекорд"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Получаем рекорд
+    pb = await service.get_personal_best(pb_id)
+    if not pb:
+        raise HTTPException(status_code=404, detail="Personal best not found")
+    
+    # Получаем спортсмена
+    athlete = await service.get_athlete(pb.athlete_id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    
+    # Проверяем права
+    if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this record")
+    
+    deleted = await service.delete_personal_best(pb_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Personal best not found")
+    return {"message": "Personal best deleted successfully"}
+
+# ===== ЗАГРУЗКА АВАТАРА =====
+
+from fastapi import UploadFile, File
+from app.services.image_service import ImageService
+
+@router.post("/{athlete_id}/upload-avatar")
+async def upload_athlete_avatar(
+    athlete_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user_optional_cookie),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузить аватар спортсмена"""
+    from app.services.athlete_service import AthleteService
+    service = AthleteService(db)
+    
+    athlete = await service.get_athlete(athlete_id)
+    if not athlete:
+        raise HTTPException(404, "Athlete not found")
+    
+    if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
+        raise HTTPException(403, "Not authorized")
+    
+    url = await ImageService.save_image(file, "athletes", resize=(400, 400))
+    await service.update_athlete(athlete_id, photo_url=url)
+    
+    return {"photo_url": url}
+
+@router.post("/{athlete_id}/upload-cover")
+async def upload_athlete_cover(
+    athlete_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user_optional_cookie),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузить обложку спортсмена"""
+    from app.services.athlete_service import AthleteService
+    service = AthleteService(db)
+    
+    athlete = await service.get_athlete(athlete_id)
+    if not athlete:
+        raise HTTPException(404, "Athlete not found")
+    
+    if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
+        raise HTTPException(403, "Not authorized")
+    
+    url = await ImageService.save_image(file, "athletes", resize=(1200, 400))
+    await service.update_athlete(athlete_id, cover_url=url)
+    
+    return {"cover_url": url}

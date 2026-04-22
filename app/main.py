@@ -1,23 +1,37 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from app.routers import auth
+from app.routers import branches
 from app.core.exceptions import BusinessError
 from app.routers import competitions
+from app.routers import branches
 from app.routers import age_categories
+from app.routers import branches
 from app.routers import swim_events
+from app.routers import branches
 from app.routers import entries
+from app.routers import branches
 from app.routers import heats
+from app.routers import branches
 from app.routers import chat
+from app.routers import branches
 from app.routers import news, articles
+from app.routers import branches
 from app.routers import schools, coaches
+from app.routers import branches
 from app.routers import coach_profiles
+from app.routers import branches
 from app.routers import athletes
-from app.core.rate_limit import limiter, setup_rate_limit
+from app.routers import branches
+from app.routers import coach_dashboard
+from app.routers import branches
+from app.core.rate_limit import setup_rate_limit
 from app.core.blocklist import is_ip_blocked
-from fastapi import Request, HTTPException
-from app.core.rate_limit import limiter, setup_rate_limit
+from app.models import User
+from app.auth import get_current_user_optional_cookie
+from fastapi import HTTPException
 
 app = FastAPI(
     title="Спортивный портал по плаванию",
@@ -45,36 +59,22 @@ async def general_error_handler(request: Request, exc: Exception):
 
 # Подключаем API роутеры
 app.include_router(auth.router)
-
 app.include_router(competitions.router)
-
 app.include_router(age_categories.router)
-
 app.include_router(swim_events.router)
-
 app.include_router(entries.router)
-
 app.include_router(heats.router)
-
 app.include_router(chat.router)
-
+app.include_router(branches.router)
 app.include_router(news.router)
-
 app.include_router(articles.router)
-
 app.include_router(schools.router)
-
 app.include_router(coaches.router)
-
 app.include_router(coach_profiles.router)
-
 app.include_router(athletes.router)
+app.include_router(coach_dashboard.router)
 
-# После создания app
-setup_rate_limit(app)
-
-
-# После создания app
+# Настройка rate limiting (ОДИН РАЗ)
 setup_rate_limit(app)
 
 
@@ -92,10 +92,6 @@ async def login_page(request: Request):
 async def register_page(request: Request):
     return templates.TemplateResponse(request=request, name="register.html")
 
-
-@app.get("/profile")
-async def profile_page(request: Request):
-    return templates.TemplateResponse(request=request, name="profile.html")
 
 
 @app.get("/live")
@@ -123,3 +119,28 @@ async def blocklist_middleware(request: Request, call_next):
         )
     response = await call_next(request)
     return response
+
+
+@app.on_event("startup")
+async def startup():
+    from app.core.cache import get_redis
+
+    try:
+        r = await get_redis()
+        await r.ping()
+        print("✅ Redis connected successfully")
+    except Exception as e:
+        print(f"❌ Redis connection failed: {e}")
+
+# Обновляем страницу профиля - передаем current_user в шаблон
+
+
+@app.get("/profile")
+async def profile_page(
+    request: Request,
+    current_user: User = Depends(get_current_user_optional_cookie)
+):
+    return templates.TemplateResponse(
+        "profile.html", 
+        {"request": request, "current_user": current_user}
+    )

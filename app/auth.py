@@ -1,3 +1,6 @@
+from jose import JWTError, jwt
+from app.core.config import settings
+
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
@@ -112,3 +115,37 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+async def get_current_user_from_websocket(
+    websocket, db: AsyncSession
+):
+    """Получает пользователя из cookie для WebSocket соединения"""
+    token = websocket.cookies.get("access_token")
+    if not token:
+        return None
+    
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: int = int(payload.get("sub"))
+        if user_id is None:
+            return None
+    except (JWTError, TypeError, ValueError):
+        return None
+
+    from app.repositories.user_repository import UserRepository
+    repo = UserRepository(db)
+    user = await repo.get_by_id(user_id)
+    return user
+
+
+async def get_current_user_from_cookie(request: Request, db: AsyncSession) -> Optional[User]:
+    """Получает пользователя из HttpOnly cookie (для ручного использования)"""
+    token = request.cookies.get("access_token")
+    if not token:
+        return None
+    
+    try:
+        return await _get_user_by_token(token, db)
+    except HTTPException:
+        return None
