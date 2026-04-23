@@ -103,6 +103,7 @@
     ├── competition_detail.html
     ├── competitions_list.html
     ├── emails/
+      ├── competition_results.html
       ├── password_reset.html
       ├── welcome.html
     ├── index.html
@@ -124,6 +125,7 @@
     ├── test.html
 ├── docker-compose.yml
 ├── docs/
+  ├── COMPLETED_FEATURES.md
   ├── pages/
     ├── athlete-detail.md
     ├── coach-detail.md
@@ -136,6 +138,7 @@
     ├── school-detail.md
     ├── schools-list.md
 ├── init_production_db.py
+├── project_context.md
 ├── requirements.txt
 ```
 
@@ -162,6 +165,14 @@ See [the docs](https://docs.pytest.org/en/stable/how-to/cache.html) for more inf
 
 ```markdown
 # Portal_of_swimming_FastAPI
+## Описание
+Современный веб-портал для управления соревнованиями по плаванию, школами, тренерами и спортсменами.
+
+## Быстрый старт
+
+### Запуск через Docker
+```bash
+docker-compose up -d
 ```
 
 ---
@@ -955,9 +966,9 @@ async def profile_page(
 ### `app/models.py`
 
 ```python
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, date, date
 from typing import Optional, List
-from sqlalchemy import String, Integer, Boolean, DateTime, Enum, ForeignKey, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, Date, Enum, ForeignKey, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -1036,8 +1047,27 @@ class School(Base):
     city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
     address: Mapped[str] = mapped_column(String(500), nullable=True)  # Нынешний адрес
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
     email: Mapped[str] = mapped_column(String(100), nullable=True)
     website: Mapped[str] = mapped_column(String(200), nullable=True)
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
 
     # ИЗОБРАЖЕНИЯ
     logo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Логотип
@@ -1073,6 +1103,17 @@ class Branch(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+
 
     # НОВОЕ ПОЛЕ - обложка филиала (если нет - берется от школы)
     cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
@@ -1129,6 +1170,15 @@ class CoachProfile(Base):
     specialization: Mapped[str] = mapped_column(String(200), nullable=True)
     is_head_coach: Mapped[bool] = mapped_column(Boolean, default=False)
     achievements: Mapped[str] = mapped_column(String(1000), nullable=True)
+    # Социальные сети
+    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+    contact_email: Mapped[str] = mapped_column(String(100), nullable=True)
+
+
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -1227,22 +1277,19 @@ class PersonalBest(Base):
         nullable=False,
         index=True,
     )
-    distance: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )  # 50, 100, 200, 400, 800, 1500
-    stroke: Mapped[str] = mapped_column(
-        String(20), nullable=False, index=True
-    )  # freestyle, breaststroke, backstroke, butterfly
+    distance: Mapped[int] = mapped_column(Integer, nullable=False)
+    stroke: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     time_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     set_at: Mapped[datetime] = mapped_column(
+
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    set_date: Mapped[date] = mapped_column(Date, nullable=True)
 
     athlete: Mapped["AthleteProfile"] = relationship(
         "AthleteProfile", back_populates="personal_bests"
     )
-
-
 class Competition(Base):
     __tablename__ = "competitions"
 
@@ -1390,6 +1437,8 @@ class Entry(Base):
     swim_event: Mapped["SwimEvent"] = relationship(
         "SwimEvent", back_populates="entries"
     )
+    set_date: Mapped[date] = mapped_column(Date, nullable=True)
+
     athlete: Mapped["AthleteProfile"] = relationship(
         "AthleteProfile", back_populates="entries"
     )
@@ -1546,6 +1595,22 @@ class PasswordResetToken(Base):
     )
 
     user: Mapped["User"] = relationship("User", backref="password_reset_tokens")
+
+class CompetitionSubscription(Base):
+    __tablename__ = "competition_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    competition_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    user: Mapped["User"] = relationship("User", backref="subscriptions")
+    competition: Mapped["Competition"] = relationship("Competition", backref="subscribers")
 ```
 
 ---
@@ -2685,7 +2750,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 
 from app.database import get_db
 from app.services.athlete_service import AthleteService
@@ -2698,26 +2763,20 @@ from app.auth import get_current_user_optional_cookie, get_current_active_user
 router = APIRouter(prefix="/athletes", tags=["athletes"])
 templates = Jinja2Templates(directory="app/templates")
 
-
 def get_athlete_service(db: AsyncSession = Depends(get_db)) -> AthleteService:
     return AthleteService(db)
-
 
 def get_school_service(db: AsyncSession = Depends(get_db)) -> SchoolService:
     return SchoolService(db)
 
-
 def get_coach_service(db: AsyncSession = Depends(get_db)) -> CoachService:
     return CoachService(db)
-
-
-# ===== ЛИЧНЫЕ РЕКОРДЫ =====
 
 class PersonalBestCreate(BaseModel):
     distance: int
     stroke: str
     time_seconds: float
-
+    set_date: str | None = None
 
 class PersonalBestResponse(BaseModel):
     id: int
@@ -2726,30 +2785,14 @@ class PersonalBestResponse(BaseModel):
     stroke: str
     time_seconds: float
     set_at: datetime
+    set_date: str | None = None
 
     class Config:
         from_attributes = True
-
-
-# ===== ЭНДПОИНТЫ ДЛЯ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ =====
-# Используем get_current_user_optional_cookie для поддержки cookie
-
-@router.get("/my/personal-bests")
-async def get_my_personal_bests(
-    current_user: User = Depends(get_current_user_optional_cookie),
-    service: AthleteService = Depends(get_athlete_service),
-):
-    """Получить личные рекорды текущего пользователя-спортсмена"""
-    if not current_user or current_user.role != UserRole.ATHLETE:
-        raise HTTPException(status_code=401, detail="Not authenticated or not athlete")
-    
-    athlete = await service.get_athlete_by_user_id(current_user.id)
-    if not athlete:
-        raise HTTPException(status_code=404, detail="Athlete profile not found")
-    
-    pbs = await service.get_personal_bests(athlete.id)
-    return pbs
-
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            date: lambda v: v.isoformat() if v else None,
+        }
 
 @router.post("/my/personal-bests", response_model=PersonalBestResponse)
 async def add_my_personal_best(
@@ -2770,108 +2813,27 @@ async def add_my_personal_best(
         distance=data.distance,
         stroke=data.stroke,
         time_seconds=data.time_seconds,
+        set_date=data.set_date,
     )
+    if pb.set_date and not isinstance(pb.set_date, str):
+        pb.set_date = pb.set_date.isoformat()
     return pb
 
-
-@router.get("/my/profile")
-async def my_profile(
-    request: Request,
+@router.get("/my/personal-bests", response_model=List[PersonalBestResponse])
+async def get_my_personal_bests(
     current_user: User = Depends(get_current_user_optional_cookie),
-    athlete_service: AthleteService = Depends(get_athlete_service),
+    service: AthleteService = Depends(get_athlete_service),
 ):
-    """Страница "Мои рекорды" для авторизованного спортсмена"""
+    """Получить личные рекорды текущего пользователя-спортсмена"""
     if not current_user or current_user.role != UserRole.ATHLETE:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=401, detail="Not authenticated or not athlete")
     
-    athlete = await athlete_service.get_athlete_by_user_id(current_user.id)
+    athlete = await service.get_athlete_by_user_id(current_user.id)
     if not athlete:
-        return templates.TemplateResponse(
-            "athlete_no_profile.html", {"request": request}
-        )
+        raise HTTPException(status_code=404, detail="Athlete profile not found")
     
-    return templates.TemplateResponse(
-        "athlete_my_profile.html", {"request": request, "athlete": athlete}
-    )
-
-
-# ===== ЭНДПОИНТЫ ДЛЯ ПРОСМОТРА ДРУГИХ СПОРТСМЕНОВ =====
-
-@router.get("/{athlete_id}/page")
-async def athlete_detail_page(
-    athlete_id: int,
-    request: Request,
-    athlete_service: AthleteService = Depends(get_athlete_service),
-    school_service: SchoolService = Depends(get_school_service),
-    coach_service: CoachService = Depends(get_coach_service),
-):
-    athlete = await athlete_service.get_athlete_with_details(athlete_id)
-    if not athlete:
-        raise HTTPException(status_code=404, detail="Athlete not found")
-    
-    school = None
-    if athlete.school_id:
-        school = await school_service.get_school(athlete.school_id)
-    
-    coach = None
-    if athlete.coach_id:
-        coach = await coach_service.get_coach(athlete.coach_id)
-    
-    personal_bests = {}
-    for pb in athlete.personal_bests:
-        key = f"{pb.distance}м {pb.stroke}"
-        personal_bests[key] = pb
-    
-    return templates.TemplateResponse(
-        "athlete_detail.html",
-        {
-            "request": request,
-            "athlete": athlete,
-            "school": school,
-            "coach": coach,
-            "personal_bests": personal_bests,
-            "now": datetime.now(),
-        },
-    )
-
-
-@router.get("/{athlete_id}")
-async def get_athlete(
-    athlete_id: int,
-    service: AthleteService = Depends(get_athlete_service),
-):
-    athlete = await service.get_athlete_with_details(athlete_id)
-    if not athlete:
-        raise HTTPException(status_code=404, detail="Athlete not found")
-    return athlete
-
-
-@router.post("/{athlete_id}/personal-bests", response_model=PersonalBestResponse)
-async def add_personal_best(
-    athlete_id: int,
-    data: PersonalBestCreate,
-    current_user: User = Depends(get_current_user_optional_cookie),
-    service: AthleteService = Depends(get_athlete_service),
-):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    athlete = await service.get_athlete(athlete_id)
-    if not athlete:
-        raise HTTPException(status_code=404, detail="Athlete not found")
-    
-    if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    pb = await service.add_personal_best(
-        athlete_id=athlete_id,
-        distance=data.distance,
-        stroke=data.stroke,
-        time_seconds=data.time_seconds,
-    )
-    return pb
-
-
+    pbs = await service.get_personal_bests(athlete.id)
+    return pbs
 
 @router.delete("/personal-bests/{pb_id}")
 async def delete_personal_best(
@@ -2883,17 +2845,14 @@ async def delete_personal_best(
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Получаем рекорд
     pb = await service.get_personal_best(pb_id)
     if not pb:
         raise HTTPException(status_code=404, detail="Personal best not found")
     
-    # Получаем спортсмена
     athlete = await service.get_athlete(pb.athlete_id)
     if not athlete:
         raise HTTPException(status_code=404, detail="Athlete not found")
     
-    # Проверяем права
     if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
         raise HTTPException(status_code=403, detail="Not authorized to delete this record")
     
@@ -2902,56 +2861,110 @@ async def delete_personal_best(
         raise HTTPException(status_code=404, detail="Personal best not found")
     return {"message": "Personal best deleted successfully"}
 
-# ===== ЗАГРУЗКА АВАТАРА =====
+class PersonalBestResponse(BaseModel):
+    id: int
+    athlete_id: int
+    distance: int
+    stroke: str
+    time_seconds: float
+    set_at: datetime
+    set_date: str | None = None
 
-from fastapi import UploadFile, File
-from app.services.image_service import ImageService
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            date: lambda v: v.isoformat() if v else None,
+        }
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            date: lambda v: v.isoformat() if v else None,
+        }
 
-@router.post("/{athlete_id}/upload-avatar")
-async def upload_athlete_avatar(
-    athlete_id: int,
-    file: UploadFile = File(...),
+@router.get("/my/profile-data")
+async def get_my_profile_data(
     current_user: User = Depends(get_current_user_optional_cookie),
     db: AsyncSession = Depends(get_db),
 ):
-    """Загрузить аватар спортсмена"""
-    from app.services.athlete_service import AthleteService
-    service = AthleteService(db)
+    """Получить данные профиля спортсмена"""
+    if not current_user or current_user.role != UserRole.ATHLETE:
+        raise HTTPException(status_code=401, detail="Not authenticated or not athlete")
     
-    athlete = await service.get_athlete(athlete_id)
+    from sqlalchemy import select
+    from app.models import AthleteProfile, School, CoachProfile, User
+    
+    result = await db.execute(
+        select(AthleteProfile).where(AthleteProfile.user_id == current_user.id)
+    )
+    athlete = result.scalar_one_or_none()
+    
     if not athlete:
-        raise HTTPException(404, "Athlete not found")
+        return {
+            "birth_date": None,
+            "gender": None,
+            "rank": None,
+            "school_name": None,
+            "coach_name": None
+        }
     
-    if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
-        raise HTTPException(403, "Not authorized")
+    # Получаем школу
+    school_name = None
+    if athlete.school_id:
+        school_result = await db.execute(select(School).where(School.id == athlete.school_id))
+        school = school_result.scalar_one_or_none()
+        school_name = school.name if school else None
     
-    url = await ImageService.save_image(file, "athletes", resize=(400, 400))
-    await service.update_athlete(athlete_id, photo_url=url)
+    # Получаем тренера
+    coach_name = None
+    if athlete.coach_id:
+        coach_result = await db.execute(
+            select(CoachProfile).where(CoachProfile.id == athlete.coach_id)
+        )
+        coach = coach_result.scalar_one_or_none()
+        if coach:
+            user_result = await db.execute(select(User).where(User.id == coach.user_id))
+            coach_user = user_result.scalar_one_or_none()
+            coach_name = coach_user.full_name if coach_user else None
     
-    return {"photo_url": url}
+    return {
+        "birth_date": athlete.birth_date.isoformat() if athlete.birth_date else None,
+        "gender": athlete.gender,
+        "rank": athlete.rank,
+        "school_name": school_name,
+        "coach_name": coach_name
+    }
 
-@router.post("/{athlete_id}/upload-cover")
-async def upload_athlete_cover(
-    athlete_id: int,
-    file: UploadFile = File(...),
+@router.put("/my/profile")
+async def update_my_profile(
+    data: dict,
     current_user: User = Depends(get_current_user_optional_cookie),
     db: AsyncSession = Depends(get_db),
 ):
-    """Загрузить обложку спортсмена"""
-    from app.services.athlete_service import AthleteService
-    service = AthleteService(db)
+    """Обновить данные профиля спортсмена"""
+    if not current_user or current_user.role != UserRole.ATHLETE:
+        raise HTTPException(status_code=401, detail="Not authenticated or not athlete")
     
-    athlete = await service.get_athlete(athlete_id)
+    from sqlalchemy import select
+    from app.models import AthleteProfile
+    
+    result = await db.execute(
+        select(AthleteProfile).where(AthleteProfile.user_id == current_user.id)
+    )
+    athlete = result.scalar_one_or_none()
+    
     if not athlete:
-        raise HTTPException(404, "Athlete not found")
+        raise HTTPException(status_code=404, detail="Athlete profile not found")
     
-    if athlete.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.COACH]:
-        raise HTTPException(403, "Not authorized")
+    # Обновляем поля
+    if 'birth_date' in data:
+        athlete.birth_date = data['birth_date']
+    if 'gender' in data:
+        athlete.gender = data['gender']
+    if 'rank' in data:
+        athlete.rank = data['rank']
     
-    url = await ImageService.save_image(file, "athletes", resize=(1200, 400))
-    await service.update_athlete(athlete_id, cover_url=url)
-    
-    return {"cover_url": url}
+    await db.commit()
+    return {"message": "Profile updated"}
 ```
 
 ---
@@ -3698,25 +3711,17 @@ from datetime import datetime
 from app.database import get_db
 from app.services.coach_service import CoachService
 from app.services.school_service import SchoolService
-from app.services.athlete_service import AthleteService
 from app.models import User, UserRole
 from app.core.dependencies import require_role
 
 router = APIRouter(prefix="/coaches", tags=["coaches"])
 templates = Jinja2Templates(directory="app/templates")
 
-
 def get_coach_service(db: AsyncSession = Depends(get_db)) -> CoachService:
     return CoachService(db)
 
-
 def get_school_service(db: AsyncSession = Depends(get_db)) -> SchoolService:
     return SchoolService(db)
-
-
-def get_athlete_service(db: AsyncSession = Depends(get_db)) -> AthleteService:
-    return AthleteService(db)
-
 
 class CoachResponse(BaseModel):
     id: int
@@ -3734,17 +3739,15 @@ class CoachResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
-# Страница деталей тренера
 @router.get("/{coach_id}/page")
 async def coach_detail_page(
     coach_id: int,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    """Страница профиля тренера"""
     coach_service = CoachService(db)
     school_service = SchoolService(db)
-    athlete_service = AthleteService(db)
     
     coach = await coach_service.get_coach(coach_id)
     if not coach:
@@ -3754,27 +3757,16 @@ async def coach_detail_page(
     if coach.school_id:
         school = await school_service.get_school(coach.school_id)
     
-    # Получаем учеников тренера
-    from sqlalchemy import select
-    from app.models import AthleteProfile, User
-    
-    result = await db.execute(
-        select(AthleteProfile)
-        .options(selectinload(AthleteProfile.user))
-        .where(AthleteProfile.coach_id == coach_id)
+    return templates.TemplateResponse(
+        "coach_detail.html",
+        {
+            "request": request,
+            "coach": coach,
+            "school": school,
+            "now": datetime.now()
+        }
     )
-    athletes = result.scalars().all()
-    
-    return templates.TemplateResponse("coach_detail.html", {
-        "request": request,
-        "coach": coach,
-        "school": school,
-        "athletes": athletes,
-        "now": datetime.now()
-    })
 
-
-# API для получения тренера
 @router.get("/{coach_id}", response_model=CoachResponse)
 async def get_coach(
     coach_id: int,
@@ -3786,7 +3778,6 @@ async def get_coach(
     return coach
 
 # ===== ЗАГРУЗКА АВАТАРА =====
-
 from fastapi import UploadFile, File
 from app.services.image_service import ImageService
 
@@ -3805,7 +3796,6 @@ async def upload_coach_avatar(
     if not coach:
         raise HTTPException(404, "Coach not found")
     
-    # Проверяем права
     if coach.user_id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.SCHOOL_REP]:
         raise HTTPException(403, "Not authorized")
     
@@ -3843,6 +3833,12 @@ async def upload_coach_cover(
 ### `app/routers/competitions.py`
 
 ```python
+from sqlalchemy import select
+from app.models import Competition, CompetitionSubscription
+
+
+from app.auth import get_current_user_optional_cookie
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -4118,6 +4114,82 @@ async def download_results_csv(
             "Content-Disposition": f"attachment; filename=results_{competition_id}.csv"
         },
     )
+
+@router.post("/{competition_id}/subscribe")
+async def toggle_subscription(
+    competition_id: int,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    db: AsyncSession = Depends(get_db),
+):
+    """Подписаться/отписаться от результатов соревнования"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Проверяем, существует ли соревнование
+    competition = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = competition.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    
+    # Проверяем существующую подписку
+    from app.models import CompetitionSubscription
+    result = await db.execute(
+        select(CompetitionSubscription).where(
+            CompetitionSubscription.user_id == current_user.id,
+            CompetitionSubscription.competition_id == competition_id
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    
+    if subscription:
+        # Отписываемся
+        await db.delete(subscription)
+        await db.commit()
+        return {"subscribed": False}
+    else:
+        # Подписываемся
+        new_subscription = CompetitionSubscription(
+            user_id=current_user.id,
+            competition_id=competition_id
+        )
+        db.add(new_subscription)
+        await db.commit()
+        return {"subscribed": True}
+
+
+@router.get("/{competition_id}/subscription-status")
+async def get_subscription_status(
+    competition_id: int,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    db: AsyncSession = Depends(get_db),
+):
+    """Проверить статус подписки"""
+    if not current_user:
+        return {"subscribed": False}
+    
+    from app.models import CompetitionSubscription
+    result = await db.execute(
+        select(CompetitionSubscription).where(
+            CompetitionSubscription.user_id == current_user.id,
+            CompetitionSubscription.competition_id == competition_id
+        )
+    )
+    subscription = result.scalar_one_or_none()
+    
+    return {"subscribed": subscription is not None}
+
+@router.post("/{competition_id}/send-notifications")
+async def send_competition_notifications(
+    competition_id: int,
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отправить уведомления подписчикам (ADMIN/SECRETARY)"""
+    service = CompetitionService(db)
+    await service.send_results_notifications(competition_id)
+    return {"message": "Notifications sent successfully"}
 ```
 
 ---
@@ -4689,6 +4761,42 @@ async def school_detail_page(
     )
 
 # ... остальные эндпоинты (GET, POST, PUT, DELETE) остаются без изменений ...
+
+@router.get("/page")
+async def schools_list_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Страница со списком школ"""
+    service = get_school_service(db)
+    schools = await service.get_all_schools()
+    return templates.TemplateResponse(
+        "schools_list.html",
+        {"request": request, "schools": schools}
+    )
+
+@router.get("/search")
+async def search_schools(
+    request: Request,
+    name: str = "",
+    city: str = "",
+    page: int = 1,
+    db: AsyncSession = Depends(get_db)
+):
+    """Поиск школ (для HTMX)"""
+    service = SchoolService(db)
+    result = await service.search_schools(name, city, page)
+    
+    return templates.TemplateResponse(
+        "partials/school_items.html",
+        {
+            "request": request,
+            "schools": result["items"],
+            "page": page,
+            "total": result["total"],
+            "pages": result["pages"],
+        }
+    )
 ```
 
 ---
@@ -5067,23 +5175,37 @@ class AthleteService:
         distance: int,
         stroke: str,
         time_seconds: float,
+        set_date: str = None,
     ) -> PersonalBest:
         """Добавить личный рекорд"""
-        return await self.pb_repo.create(
-            athlete_id=athlete_id,
-            distance=distance,
-            stroke=stroke,
-            time_seconds=time_seconds,
-        )
+        from datetime import datetime
+        data = {
+            'athlete_id': athlete_id,
+            'distance': distance,
+            'stroke': stroke,
+            'time_seconds': time_seconds,
+        }
+        if set_date:
+            try:
+                data['set_date'] = datetime.strptime(set_date, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        result = await self.pb_repo.create(**data)
+        if hasattr(result, 'set_date') and result.set_date and not isinstance(result.set_date, str):
+            result.set_date = result.set_date.isoformat()
+        return result
     
     async def get_personal_bests(self, athlete_id: int) -> List[PersonalBest]:
         """Получить все личные рекорды спортсмена"""
-        return await self.pb_repo.get_by_athlete(athlete_id)
+        result = await self.pb_repo.get_by_athlete(athlete_id)
+        for record in result:
+            if hasattr(record, 'set_date') and record.set_date and not isinstance(record.set_date, str):
+                record.set_date = record.set_date.isoformat()
+        return result
     
     async def delete_personal_best(self, pb_id: int) -> bool:
         """Удалить личный рекорд"""
         return await self.pb_repo.delete(pb_id)
-
 
     async def get_personal_best(self, pb_id: int) -> Optional[PersonalBest]:
         """Получить личный рекорд по ID"""
@@ -5454,6 +5576,65 @@ class CompetitionService:
         self, name: str = "", city: str = "", status: str = "", page: int = 1
     ) -> dict:
         return await self.repo.search(name, city, status, page)
+
+    async def send_results_notifications(self, competition_id: int) -> None:
+        """Отправить уведомления подписчикам о завершении соревнования"""
+        from app.models import CompetitionSubscription, User
+        from app.core.email import send_email
+        
+        # Получаем соревнование
+        competition = await self.get_competition(competition_id)
+        if not competition:
+            return
+        
+        # Получаем всех подписчиков
+        result = await self.session.execute(
+            select(CompetitionSubscription).where(
+                CompetitionSubscription.competition_id == competition_id
+            )
+        )
+        subscribers = result.scalars().all()
+        
+        if not subscribers:
+            return
+        
+        # Получаем email подписчиков
+        user_ids = [sub.user_id for sub in subscribers]
+        users_result = await self.session.execute(
+            select(User).where(User.id.in_(user_ids))
+        )
+        users = users_result.scalars().all()
+        
+        # Создаем новость на портале
+        from app.models import News
+        news = News(
+            title=f"Завершены соревнования: {competition.name}",
+            content=f"Соревнования {competition.name} завершены. Результаты доступны на странице соревнования.",
+            is_published=True,
+            published_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc)
+        )
+        self.session.add(news)
+        
+        # Отправляем email каждому подписчику
+        results_link = f"http://localhost:8000/competitions/{competition_id}/page"
+        
+        for user in users:
+            if user.email:
+                await send_email(
+                    to_email=user.email,
+                    subject=f"Результаты соревнования: {competition.name}",
+                    template_name="competition_results.html",
+                    context={
+                        "user_name": user.full_name,
+                        "competition_name": competition.name,
+                        "results_link": results_link,
+                        "competition": competition
+                    }
+                )
+        
+        await self.session.commit()
+        logger.info(f"Sent results notifications for competition {competition_id} to {len(users)} subscribers")
 ```
 
 ---
@@ -6746,6 +6927,8 @@ console.log('✅ Toast notifications loaded');
         }
     });
     </script>
+    {% block scripts %}{% endblock %}
+
 </body>
 </html>
 ```
@@ -6775,9 +6958,42 @@ console.log('✅ Toast notifications loaded');
             <div class="card-body">
                 <p><strong>Адрес:</strong> {{ branch.address }}</p>
                 {% if branch.phone %}
-                <p><strong>Телефон:</strong> {{ branch.phone }}</p>
+                <p><strong>Телефон:</strong> <a href="tel:{{ branch.phone }}" class="text-decoration-none">{{ branch.phone }}</a></p>
+                {% endif %}
+                {% if branch.email %}
+                <p><strong>Email:</strong> <a href="mailto:{{ branch.email }}">{{ branch.email }}</a></p>
                 {% endif %}
                 <p><strong>Школа:</strong> <a href="/schools/{{ school.id }}/page">{{ school.name }}</a></p>
+                
+                <!-- Социальные сети филиала -->
+                <div class="mt-3">
+                    <strong>Соцсети филиала:</strong>
+                    <div class="mt-2">
+                        {% if branch.vk_url %}
+                        <a href="{{ branch.vk_url }}" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="fab fa-vk"></i> VK
+                        </a>
+                        {% endif %}
+                        {% if branch.telegram_url %}
+                        <a href="{{ branch.telegram_url }}" target="_blank" class="btn btn-sm btn-outline-info me-2">
+                            <i class="fab fa-telegram"></i> Telegram
+                        </a>
+                        {% endif %}
+                        {% if branch.youtube_url %}
+                        <a href="{{ branch.youtube_url }}" target="_blank" class="btn btn-sm btn-outline-danger me-2">
+                            <i class="fab fa-youtube"></i> YouTube
+                        </a>
+                        {% endif %}
+                        {% if branch.instagram_url %}
+                        <a href="{{ branch.instagram_url }}" target="_blank" class="btn btn-sm btn-outline-secondary me-2">
+                            <i class="fab fa-instagram"></i> Instagram
+                        </a>
+                        {% endif %}
+                        {% if not branch.vk_url and not branch.telegram_url and not branch.youtube_url and not branch.instagram_url %}
+                        <span class="text-muted">Нет ссылок на соцсети</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -6795,11 +7011,9 @@ async function loadBranchCoaches() {
         const response = await fetch('/branches/{{ branch.id }}/coaches');
         const coaches = await response.json();
         
-        // Отделяем старшего тренера
         const headCoach = coaches.find(c => c.is_head_coach === true);
         const otherCoaches = coaches.filter(c => c.is_head_coach !== true);
         
-        // Старший тренер
         const headCoachSection = document.getElementById('head-coach-section');
         if (headCoach) {
             headCoachSection.innerHTML = `
@@ -6834,7 +7048,6 @@ async function loadBranchCoaches() {
             `;
         }
         
-        // Остальные тренеры
         const coachesSection = document.getElementById('coaches-section');
         if (otherCoaches.length > 0) {
             let coachesHtml = `
@@ -7024,6 +7237,46 @@ loadBranchCoaches();
                     <a href="/schools/{{ school.id }}/page">{{ school.name }}</a>
                 </p>
                 {% endif %}
+                
+                <div class="mt-3 text-start">
+                    {% if coach.phone %}
+                    <p class="mb-2">
+                        <i class="fas fa-phone text-primary"></i> 
+                        <a href="tel:{{ coach.phone }}" class="text-decoration-none">{{ coach.phone }}</a>
+                    </p>
+                    {% endif %}
+                    {% if coach.contact_email %}
+                    <p class="mb-2">
+                        <i class="fas fa-envelope text-primary"></i> 
+                        <a href="mailto:{{ coach.contact_email }}" class="text-decoration-none">{{ coach.contact_email }}</a>
+                    </p>
+                    {% endif %}
+                </div>
+                
+                <div class="mt-3">
+                    <div class="d-flex justify-content-center gap-2">
+                        {% if coach.vk_url %}
+                        <a href="{{ coach.vk_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="fab fa-vk"></i>
+                        </a>
+                        {% endif %}
+                        {% if coach.telegram_url %}
+                        <a href="{{ coach.telegram_url }}" target="_blank" class="btn btn-sm btn-outline-info">
+                            <i class="fab fa-telegram"></i>
+                        </a>
+                        {% endif %}
+                        {% if coach.youtube_url %}
+                        <a href="{{ coach.youtube_url }}" target="_blank" class="btn btn-sm btn-outline-danger">
+                            <i class="fab fa-youtube"></i>
+                        </a>
+                        {% endif %}
+                        {% if coach.instagram_url %}
+                        <a href="{{ coach.instagram_url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -7075,31 +7328,6 @@ loadBranchCoaches();
                 </div>
             </div>
         </div>
-        
-        {% if athletes %}
-        <div class="card">
-            <div class="card-body">
-                <h4 class="card-title">Ученики</h4>
-                <div class="list-group">
-                    {% for athlete in athletes %}
-                    <a href="/athletes/{{ athlete.id }}/page" class="list-group-item list-group-item-action">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ athlete.user.full_name }}</strong>
-                                {% if athlete.rank %}
-                                <span class="badge bg-success ms-2">{{ athlete.rank }}</span>
-                                {% endif %}
-                                <br>
-                                <small class="text-muted">{{ athlete.gender or 'Пол не указан' }}</small>
-                            </div>
-                            <i class="fas fa-chevron-right"></i>
-                        </div>
-                    </a>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
         
         <div class="text-center mt-3">
             <a href="javascript:history.back()" class="btn btn-secondary">← Назад</a>
@@ -7226,8 +7454,8 @@ loadBranchCoaches();
                 <h1>{{ competition.name }}</h1>
                 <p class="text-muted">{{ competition.description or 'Нет описания' }}</p>
                 <hr>
-                <p><strong>📅 Дата начала:</strong> {{ competition.start_date }}</p>
-                <p><strong>📅 Дата окончания:</strong> {{ competition.end_date }}</p>
+                <p><strong>📅 Дата начала:</strong> {{ competition.start_date.strftime('%d.%m.%Y %H:%M') if competition.start_date else 'Не указана' }}</p>
+                <p><strong>📅 Дата окончания:</strong> {{ competition.end_date.strftime('%d.%m.%Y %H:%M') if competition.end_date else 'Не указана' }}</p>
                 <p><strong>📍 Место:</strong> {{ competition.venue or 'Не указано' }}, {{ competition.city or 'Не указан' }}</p>
                 <p><strong>📊 Статус:</strong> <span class="badge bg-secondary">{{ competition.status }}</span></p>
                 
@@ -7236,7 +7464,8 @@ loadBranchCoaches();
                         <i class="fas fa-file-pdf"></i> Предстартовый протокол
                     </a>
                     <a href="/competitions/{{ competition.id }}/results.pdf" class="btn btn-success">
-                        <i class="fas fa-file-pdf"></i> Итоговый протокол</a>
+                        <i class="fas fa-file-pdf"></i> Итоговый протокол
+                    </a>
                     <a href="/competitions/{{ competition.id }}/results.csv" class="btn btn-info">
                         <i class="fas fa-file-csv"></i> CSV результаты
                     </a>
@@ -7245,130 +7474,107 @@ loadBranchCoaches();
         </div>
     </div>
     <div class="col-md-4">
-        <div x-data="chatComponent('competition_{{ competition.id }}')" x-init="initWebSocket()" class="card">
+        <div class="card">
             <div class="card-header bg-primary text-white">
-                <i class="fas fa-comments"></i> Чат соревнования
+                <i class="fas fa-bell"></i> Уведомления
             </div>
-            <div class="card-body" style="height: 300px; overflow-y: auto;" x-ref="messagesContainer">
-                <template x-for="(msg, idx) in messages" :key="idx">
-                    <div class="mb-2">
-                        <strong x-text="msg.user"></strong>:
-                        <span x-text="msg.message"></span>
-                        <small class="text-muted ms-2" x-text="msg.created_at ? new Date(msg.created_at).toLocaleTimeString() : ''"></small>
-                    </div>
-                </template>
-                <div x-show="messages.length === 0" class="text-muted text-center">
-                    Нет сообщений. Будьте первым!
-                </div>
-            </div>
-            <div class="card-footer">
-                <div class="input-group">
-                    <input type="text" class="form-control" x-model="newMessage" @keyup.enter="sendMessage()" placeholder="Введите сообщение...">
-                    <button class="btn btn-primary" @click="sendMessage()" :disabled="!newMessage.trim()">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
+            <div class="card-body text-center">
+                <button onclick="toggleSubscription({{ competition.id }})" id="subscribeBtn" class="btn btn-outline-primary">
+                    <i class="fas fa-bell"></i> Подписаться на результаты
+                </button>
+                <div id="subscribeMessage" class="mt-2 small text-muted"></div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-function chatComponent(room) {
-    return {
-        room: room,
-        messages: [],
-        newMessage: '',
-        ws: null,
+let currentSubscriptionStatus = false;
 
-        initWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/chat/${this.room}`;
-            this.ws = new WebSocket(wsUrl);
-
-            this.ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.type === 'message' || data.type === 'history') {
-                    this.messages.push(data);
-                    this.$nextTick(() => {
-                        const container = this.$refs.messagesContainer;
-                        if (container) container.scrollTop = container.scrollHeight;
-                    });
-                }
-            };
-
-            this.ws.onclose = () => {
-                console.log('WebSocket disconnected, reconnecting...');
-                setTimeout(() => this.initWebSocket(), 3000);
-            };
-        },
-
-        sendMessage() {
-            if (this.newMessage.trim() && this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify({ message: this.newMessage.trim() }));
-                this.newMessage = '';
-            }
+// Проверка статуса подписки
+function checkSubscriptionStatus(competitionId) {
+    fetch(`/competitions/${competitionId}/subscription-status`, {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        currentSubscriptionStatus = data.subscribed;
+        const btn = document.getElementById('subscribeBtn');
+        if (data.subscribed) {
+            btn.innerHTML = '<i class="fas fa-bell"></i> ✓ Вы подписаны';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-success');
+        } else {
+            btn.innerHTML = '<i class="fas fa-bell"></i> Подписаться на результаты';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-primary');
         }
-    }
+    })
+    .catch(() => {});
 }
+
+// Переключение подписки
+function toggleSubscription(competitionId) {
+    // Сначала проверяем авторизацию
+    fetch('/auth/me', { credentials: 'include' })
+        .then(response => {
+            if (!response.ok) {
+                sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
+                window.location.href = '/login';
+                return;
+            }
+            // Авторизованы - переключаем подписку
+            fetch(`/competitions/${competitionId}/subscribe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                const btn = document.getElementById('subscribeBtn');
+                const msgDiv = document.getElementById('subscribeMessage');
+                if (data.subscribed) {
+                    btn.innerHTML = '<i class="fas fa-bell"></i> ✓ Вы подписаны';
+                    btn.classList.remove('btn-outline-primary');
+                    btn.classList.add('btn-success');
+                    msgDiv.innerHTML = '✓ Вы подписались на результаты';
+                    msgDiv.style.color = 'green';
+                    currentSubscriptionStatus = true;
+                } else {
+                    btn.innerHTML = '<i class="fas fa-bell"></i> Подписаться на результаты';
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-primary');
+                    msgDiv.innerHTML = 'Вы отписались от результатов';
+                    msgDiv.style.color = 'red';
+                    currentSubscriptionStatus = false;
+                }
+                setTimeout(() => { msgDiv.innerHTML = ''; }, 3000);
+            })
+            .catch(() => {
+                alert('Ошибка при подписке');
+            });
+        })
+        .catch(() => {
+            sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
+            window.location.href = '/login';
+        });
+}
+
+// Загрузка страницы
+document.addEventListener('DOMContentLoaded', function() {
+    const competitionId = {{ competition.id }};
+    
+    // Проверяем, вернулись ли с логина
+    const redirectUrl = sessionStorage.getItem('redirectAfterLogin');
+    if (redirectUrl && window.location.pathname === redirectUrl) {
+        sessionStorage.removeItem('redirectAfterLogin');
+    }
+    
+    // Проверяем статус подписки
+    checkSubscriptionStatus(competitionId);
+});
 </script>
 {% endblock %}
-
-<div class="mt-3">
-    <button class="btn btn-danger" onclick="deleteCompetition({{ competition.id }})">
-        <i class="fas fa-trash"></i> Удалить соревнование
-    </button>
-</div>
-
-<script>
-function getToken() {
-    const match = document.cookie.match(/access_token=([^;]+)/);
-    return match ? match[1] : null;
-}
-
-function deleteCompetition(competitionId) {
-    if (confirm('Вы уверены, что хотите удалить это соревнование? Действие необратимо.')) {
-        fetch(`/competitions/${competitionId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${getToken()}`
-            }
-        }).then(response => {
-            if (response.ok) {
-                window.location.href = '/competitions/page';
-            } else {
-                alert('Ошибка при удалении');
-            }
-        }).catch(err => {
-            console.error('Ошибка:', err);
-            alert('Ошибка при удалении');
-        });
-    }
-}
-</script>
-<script>
-// Дополняем существующий chatComponent
-function chatComponentWithNotifications(room) {
-    const component = chatComponent(room);
-    
-    // Сохраняем оригинальный sendMessage
-    const originalSend = component.sendMessage;
-    
-    // Переопределяем sendMessage с уведомлением
-    component.sendMessage = function() {
-        if (this.newMessage.trim() && this.ws && this.ws.readyState === WebSocket.OPEN) {
-            const message = this.newMessage.trim();
-            this.ws.send(JSON.stringify({ message: message }));
-            showSuccess('✉️ Сообщение отправлено');
-            this.newMessage = '';
-        } else if (!this.connected) {
-            showError('❌ Нет соединения с чатом');
-        }
-    };
-    
-    return component;
-}
-</script>
 ```
 
 ---
@@ -7450,6 +7656,39 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+```
+
+---
+
+### `app/templates/emails/competition_results.html`
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #0d6efd; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .button { background: #0d6efd; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏊 Результаты соревнований</h1>
+        </div>
+        <div class="content">
+            <p>Здравствуйте, {{ user_name }}!</p>
+            <p>Соревнования <strong>{{ competition_name }}</strong> завершены.</p>
+            <p>Результаты доступны по ссылке:</p>
+            <p><a href="{{ results_link }}" class="button">Посмотреть результаты</a></p>
+            <p>Спасибо за интерес к нашему порталу!</p>
+        </div>
+    </div>
+</body>
+</html>
 ```
 
 ---
@@ -8215,49 +8454,37 @@ function loadPage(page) {
         <div class="card mb-4">
             <div class="card-body">
                 <h3 class="card-title text-center mb-4">Личный кабинет</h3>
-
-                <div x-data="profile()" x-init="loadProfile()">
-                    <div x-show="loading" class="text-center">Загрузка...</div>
-                    <div x-show="!loading && error" class="alert alert-danger" x-text="error"></div>
-
-                    <div x-show="!loading && !error">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">ID</label>
-                                    <p class="form-control-plaintext" x-text="user.id"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Email</label>
-                                    <p class="form-control-plaintext" x-text="user.email"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Имя пользователя</label>
-                                    <p class="form-control-plaintext" x-text="user.username"></p>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Полное имя</label>
-                                    <p class="form-control-plaintext" x-text="user.full_name"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Роль</label>
-                                    <p class="form-control-plaintext" x-text="user.role"></p>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Дата регистрации</label>
-                                    <p class="form-control-plaintext" x-text="new Date(user.created_at).toLocaleString()"></p>
-                                </div>
-                            </div>
+                <div id="userInfo">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Личные рекорды - проверяем role.name или role.value -->
-        {% if current_user and (current_user.role.name == 'ATHLETE' or current_user.role.value == 'athlete') %}
+        <!-- Информация о спортсмене -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-user-circle"></i> Профиль спортсмена</h5>
+            </div>
+            <div class="card-body">
+                <div id="athleteInfo">
+                    <div class="text-center">
+                        <div class="spinner-border text-success spinner-border-sm" role="status"></div>
+                        <span class="ms-2">Загрузка...</span>
+                    </div>
+                </div>
+                <div class="mt-3 text-center">
+                    <button class="btn btn-sm btn-outline-primary" onclick="editAthleteProfile()">
+                        <i class="fas fa-edit"></i> Редактировать профиль
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Личные рекорды -->
         <div class="card">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0"><i class="fas fa-medal"></i> Мои личные рекорды</h5>
@@ -8265,7 +8492,7 @@ function loadPage(page) {
             <div class="card-body">
                 <form id="addRecordForm" class="mb-4 p-3 bg-light rounded">
                     <div class="row g-2">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small">Дистанция</label>
                             <select class="form-select form-select-sm" id="distance" required>
                                 <option value="">Выберите</option>
@@ -8277,7 +8504,7 @@ function loadPage(page) {
                                 <option value="1500">1500 метров</option>
                             </select>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small">Стиль</label>
                             <select class="form-select form-select-sm" id="stroke" required>
                                 <option value="">Выберите</option>
@@ -8288,8 +8515,12 @@ function loadPage(page) {
                                 <option value="medley">Комплекс</option>
                             </select>
                         </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Дата рекорда</label>
+                            <input type="date" class="form-control form-control-sm" id="setDate">
+                        </div>
                         <div class="col-md-3">
-                            <label class="form-label small">Время (секунды)</label>
+                            <label class="form-label small">Время (сек)</label>
                             <input type="number" step="0.01" class="form-control form-control-sm" id="timeSeconds" placeholder="Например: 25.5" required>
                         </div>
                         <div class="col-md-1 d-flex align-items-end">
@@ -8308,92 +8539,165 @@ function loadPage(page) {
                 </div>
             </div>
         </div>
-        {% endif %}
-
-        <div class="d-grid gap-2 mt-3">
-            <a href="/" class="btn btn-secondary">На главную</a>
-            <button onclick="logout()" class="btn btn-danger">Выйти</button>
-        </div>
     </div>
 </div>
 
-<script>
-function profile() {
-    return {
-        user: null,
-        loading: true,
-        error: '',
+<!-- Модальное окно редактирования профиля -->
+<div class="modal fade" id="editProfileModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редактирование профиля спортсмена</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editProfileForm">
+                    <div class="mb-3">
+                        <label class="form-label">Дата рождения</label>
+                        <input type="date" class="form-control" id="editBirthDate">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Пол</label>
+                        <select class="form-select" id="editGender">
+                            <option value="">Не указан</option>
+                            <option value="male">Мужской</option>
+                            <option value="female">Женский</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Разряд</label>
+                        <input type="text" class="form-control" id="editRank" placeholder="Например: КМС, 1 разряд">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveAthleteProfile()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-        async loadProfile() {
-            this.loading = true;
-            try {
-                const response = await fetch('/auth/me', { credentials: 'include' });
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                    return;
-                }
-                if (response.ok) {
-                    this.user = await response.json();
-                    console.log('User loaded:', this.user);
-                } else {
-                    this.error = 'Не удалось загрузить профиль';
-                }
-            } catch (err) {
-                this.error = 'Ошибка сети';
-            } finally {
-                this.loading = false;
-            }
-        }
+{% block scripts %}
+<script>
+let currentAthlete = null;
+
+async function loadUser() {
+    const response = await fetch('/auth/me', { credentials: 'include' });
+    if (response.ok) {
+        const user = await response.json();
+        document.getElementById('userInfo').innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-user"></i> Полное имя:</strong> ${user.full_name}</p>
+                    <p><strong><i class="fas fa-envelope"></i> Email:</strong> ${user.email}</p>
+                    <p><strong><i class="fas fa-user-tag"></i> Имя пользователя:</strong> ${user.username}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-tag"></i> Роль:</strong> <span class="badge bg-primary">${user.role}</span></p>
+                    <p><strong><i class="fas fa-calendar"></i> Дата регистрации:</strong> ${new Date(user.created_at).toLocaleDateString()}</p>
+                    <p><strong><i class="fas fa-check-circle"></i> Статус:</strong> ${user.is_active ? 'Активен' : 'Заблокирован'}</p>
+                </div>
+            </div>
+        `;
+    } else {
+        window.location.href = '/login';
     }
 }
 
-function logout() {
-    fetch('/auth/logout', { method: 'POST', credentials: 'include' })
-        .then(() => window.location.href = '/');
+async function loadAthleteProfile() {
+    const response = await fetch('/athletes/my/profile-data', { credentials: 'include' });
+    if (response.ok) {
+        currentAthlete = await response.json();
+        const schoolName = currentAthlete.school_name || 'Не указана';
+        const coachName = currentAthlete.coach_name || 'Не указан';
+        
+        document.getElementById('athleteInfo').innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-calendar"></i> Дата рождения:</strong><br>${currentAthlete.birth_date ? new Date(currentAthlete.birth_date).toLocaleDateString() : 'Не указана'}</p>
+                    <p><strong><i class="fas fa-venus-mars"></i> Пол:</strong><br>${currentAthlete.gender === 'male' ? 'Мужской' : (currentAthlete.gender === 'female' ? 'Женский' : 'Не указан')}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong><i class="fas fa-medal"></i> Разряд:</strong><br>${currentAthlete.rank || 'Не указан'}</p>
+                    <p><strong><i class="fas fa-school"></i> Школа:</strong><br>${schoolName}</p>
+                    <p><strong><i class="fas fa-chalkboard-user"></i> Тренер:</strong><br>${coachName}</p>
+                </div>
+            </div>
+        `;
+        
+        // Заполняем форму редактирования
+        document.getElementById('editBirthDate').value = currentAthlete.birth_date || '';
+        document.getElementById('editGender').value = currentAthlete.gender || '';
+        document.getElementById('editRank').value = currentAthlete.rank || '';
+    } else {
+        document.getElementById('athleteInfo').innerHTML = '<p class="text-muted text-center">Профиль спортсмена не найден</p>';
+    }
+}
+
+async function editAthleteProfile() {
+    if (currentAthlete) {
+        const modal = new bootstrap.Modal(document.getElementById('editProfileModal'));
+        modal.show();
+    }
+}
+
+async function saveAthleteProfile() {
+    const data = {
+        birth_date: document.getElementById('editBirthDate').value || null,
+        gender: document.getElementById('editGender').value || null,
+        rank: document.getElementById('editRank').value || null
+    };
+    
+    const response = await fetch('/athletes/my/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include'
+    });
+    
+    if (response.ok) {
+        alert('Профиль обновлен!');
+        bootstrap.Modal.getInstance(document.getElementById('editProfileModal')).hide();
+        loadAthleteProfile();
+    } else {
+        alert('Ошибка обновления');
+    }
 }
 
 async function loadRecords() {
-    try {
-        const response = await fetch('/athletes/my/personal-bests', { credentials: 'include' });
-        if (!response.ok) throw new Error('Ошибка загрузки');
+    const response = await fetch('/athletes/my/personal-bests', { credentials: 'include' });
+    if (response.ok) {
         const records = await response.json();
-        
         if (records.length === 0) {
             document.getElementById('recordsList').innerHTML = '<p class="text-muted text-center py-3 mb-0">Нет личных рекордов. Добавьте свой первый рекорд!</p>';
             return;
         }
-        
-        const grouped = {};
-        records.forEach(record => {
-            const key = `${record.distance}м`;
-            if (!grouped[key]) grouped[key] = [];
-            grouped[key].push(record);
-        });
         
         const strokeNames = {
             'freestyle': 'Вольный стиль', 'breaststroke': 'Брасс',
             'backstroke': 'На спине', 'butterfly': 'Баттерфляй', 'medley': 'Комплекс'
         };
         
-        let html = '';
-        for (const [distance, items] of Object.entries(grouped)) {
-            html += `<h6 class="mt-3">${distance}</h6>`;
-            html += `<div class="table-responsive"><table class="table table-sm table-striped">
-                <thead><tr><th>Стиль</th><th>Время (сек)</th><th>Дата</th><th></th></tr></thead><tbody>`;
-            items.forEach(record => {
-                html += `
-                    <tr>
-                        <td>${strokeNames[record.stroke] || record.stroke}</td>
-                        <td><strong>${record.time_seconds}</strong></td>
-                        <td>${record.set_at ? new Date(record.set_at).toLocaleDateString() : '-'}</td>
-                        <td><button class="btn btn-sm btn-danger" onclick="deleteRecord(${record.id})"><i class="fas fa-trash"></i></button></td>
-                    </tr>
-                `;
-            });
-            html += `</tbody></table></div>`;
-        }
+        let html = '<div class="table-responsive"><table class="table table-sm table-striped">';
+        html += '<thead><tr><th>Дистанция</th><th>Стиль</th><th>Время (сек)</th><th>Дата</th><th></th></thead><tbody>';
+        
+        records.forEach(record => {
+            let dateStr = record.set_date || (record.set_at ? new Date(record.set_at).toLocaleDateString() : '-');
+            html += `
+                <tr>
+                    <td>${record.distance}м</td>
+                    <td>${strokeNames[record.stroke] || record.stroke}</td>
+                    <td><strong>${record.time_seconds}</strong></td>
+                    <td>${dateStr}</td>
+                    <td><button class="btn btn-sm btn-danger" onclick="deleteRecord(${record.id})"><i class="fas fa-trash"></i></button></td>
+                </tr>
+            `;
+        });
+        html += '</tbody></table></div>';
         document.getElementById('recordsList').innerHTML = html;
-    } catch (error) {
+    } else {
         document.getElementById('recordsList').innerHTML = '<p class="text-danger text-center py-3 mb-0">Ошибка загрузки рекордов</p>';
     }
 }
@@ -8402,100 +8706,67 @@ const form = document.getElementById('addRecordForm');
 if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
         const distance = document.getElementById('distance').value;
         const stroke = document.getElementById('stroke').value;
         const timeSeconds = document.getElementById('timeSeconds').value;
+        const setDate = document.getElementById('setDate').value;
         
         if (!distance || !stroke || !timeSeconds) {
-            alert('Заполните все поля');
+            alert('Заполните дистанцию, стиль и время');
             return;
         }
         
-        try {
-            const response = await fetch('/athletes/my/personal-bests', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    distance: parseInt(distance),
-                    stroke: stroke,
-                    time_seconds: parseFloat(timeSeconds)
-                }),
-                credentials: 'include'
-            });
-            
-            if (response.ok) {
-                document.getElementById('timeSeconds').value = '';
-                document.getElementById('distance').value = '';
-                document.getElementById('stroke').value = '';
-                alert('Рекорд добавлен!');
-                loadRecords();
-            } else {
-                const error = await response.json();
-                alert(error.detail || 'Ошибка добавления');
-            }
-        } catch (error) {
-            alert('Ошибка сети');
+        const data = {
+            distance: parseInt(distance),
+            stroke: stroke,
+            time_seconds: parseFloat(timeSeconds)
+        };
+        if (setDate) {
+            data.set_date = setDate;
+        }
+        
+        const response = await fetch('/athletes/my/personal-bests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            document.getElementById('timeSeconds').value = '';
+            document.getElementById('setDate').value = '';
+            document.getElementById('distance').value = '';
+            document.getElementById('stroke').value = '';
+            loadRecords();
+            alert('Рекорд добавлен!');
+        } else {
+            const error = await response.json();
+            alert(error.detail || 'Ошибка добавления');
         }
     });
 }
 
 window.deleteRecord = async function(recordId) {
     if (confirm('Удалить этот рекорд?')) {
-        try {
-            const response = await fetch(`/athletes/personal-bests/${recordId}`, {
-                method: 'DELETE',
-                credentials: 'include'
-            });
-            if (response.ok) {
-                alert('Рекорд удален');
-                loadRecords();
-            } else {
-                alert('Ошибка удаления');
-            }
-        } catch (error) {
-            alert('Ошибка сети');
+        const response = await fetch(`/athletes/personal-bests/${recordId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        if (response.ok) {
+            loadRecords();
+            alert('Рекорд удален');
+        } else {
+            alert('Ошибка удаления');
         }
     }
 };
 
-{% if current_user and (current_user.role.name == 'ATHLETE' or current_user.role.value == 'athlete') %}
-document.addEventListener('DOMContentLoaded', loadRecords);
-{% endif %}
+loadUser();
+loadAthleteProfile();
+loadRecords();
 </script>
 {% endblock %}
-<script>
-// ... существующий код ...
-
-// Функция удаления рекорда с CSRF токеном
-window.deleteRecord = async function(recordId) {
-    if (confirm('Удалить этот рекорд?')) {
-        // Получаем CSRF токен из cookie
-        const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
-        const csrfToken = csrfMatch ? csrfMatch[1] : '';
-        
-        try {
-            const response = await fetch(`/athletes/personal-bests/${recordId}`, {
-                method: 'DELETE',
-                credentials: 'include',
-                headers: {
-                    'X-CSRF-Token': csrfToken
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                alert('Рекорд удален');
-                loadRecords(); // Перезагружаем список
-            } else {
-                const error = await response.json();
-                alert(error.detail || 'Ошибка удаления');
-            }
-        } catch (error) {
-            alert('Ошибка сети');
-        }
-    }
-};
-</script>
 ```
 
 ---
@@ -8654,12 +8925,42 @@ function registerForm() {
                 <p><strong>Город:</strong> {{ school.city }}</p>
                 <p><strong>Адрес:</strong> {{ school.address }}</p>
                 {% if school.phone %}
-                <p><strong>Телефон:</strong> {{ school.phone }}</p>
+                <p><strong>Телефон:</strong> <a href="tel:{{ school.phone }}" class="text-decoration-none">{{ school.phone }}</a></p>
                 {% endif %}
                 {% if school.email %}
-                <p><strong>Email:</strong> {{ school.email }}</p>
+                <p><strong>Email:</strong> <a href="mailto:{{ school.email }}" class="text-decoration-none">{{ school.email }}</a></p>
                 {% endif %}
                 <p>{{ school.description }}</p>
+                
+                <!-- Социальные сети -->
+                <div class="mt-3">
+                    <strong>Мы в соцсетях:</strong>
+                    <div class="mt-2">
+                        {% if school.vk_url %}
+                        <a href="{{ school.vk_url }}" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="fab fa-vk"></i> VK
+                        </a>
+                        {% endif %}
+                        {% if school.telegram_url %}
+                        <a href="{{ school.telegram_url }}" target="_blank" class="btn btn-sm btn-outline-info me-2">
+                            <i class="fab fa-telegram"></i> Telegram
+                        </a>
+                        {% endif %}
+                        {% if school.youtube_url %}
+                        <a href="{{ school.youtube_url }}" target="_blank" class="btn btn-sm btn-outline-danger me-2">
+                            <i class="fab fa-youtube"></i> YouTube
+                        </a>
+                        {% endif %}
+                        {% if school.instagram_url %}
+                        <a href="{{ school.instagram_url }}" target="_blank" class="btn btn-sm btn-outline-secondary me-2">
+                            <i class="fab fa-instagram"></i> Instagram
+                        </a>
+                        {% endif %}
+                        {% if not school.vk_url and not school.telegram_url and not school.youtube_url and not school.instagram_url %}
+                        <span class="text-muted">Нет ссылок на соцсети</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -8816,6 +9117,180 @@ services:
 
 volumes:
   postgres_data:
+```
+
+---
+
+### `docs/COMPLETED_FEATURES.md`
+
+```markdown
+# Выполненные функции портала
+
+## Дата: 22 апреля 2026
+
+### 1. Личный кабинет спортсмена ✅
+
+#### Реализовано:
+- ✅ Просмотр личных данных пользователя (email, имя, роль, дата регистрации)
+- ✅ Просмотр профиля спортсмена (дата рождения, пол, разряд, школа, тренер)
+- ✅ Редактирование профиля спортсмена (модальное окно)
+- ✅ Добавление личных рекордов с возможностью указать дату рекорда
+- ✅ Удаление личных рекордов
+- ✅ Просмотр всех личных рекордов в таблице
+
+#### Технические детали:
+- Добавлено поле `set_date` в таблицу `personal_bests`
+- Обновлена модель `PersonalBest` с полем `set_date`
+- Созданы API эндпоинты:
+  - `GET /athletes/my/personal-bests` - получение рекордов
+  - `POST /athletes/my/personal-bests` - добавление рекорда
+  - `DELETE /athletes/personal-bests/{pb_id}` - удаление рекорда
+  - `GET /athletes/my/profile-data` - получение профиля
+  - `PUT /athletes/my/profile` - обновление профиля
+
+### 2. Подписка на результаты соревнований ✅
+
+#### Реализовано:
+- ✅ Кнопка "Подписаться на результаты" на странице соревнования
+- ✅ Проверка авторизации перед подпиской
+- ✅ Сохранение подписки в БД (таблица `competition_subscriptions`)
+- ✅ Отображение статуса подписки (подписан/не подписан)
+- ✅ Автоматическая рассылка email при завершении соревнования
+- ✅ Автоматическое создание новости на портале
+
+#### Технические детали:
+- Создана таблица `competition_subscriptions`
+- Добавлены эндпоинты:
+  - `POST /competitions/{id}/subscribe` - подписка/отписка
+  - `GET /competitions/{id}/subscription-status` - проверка статуса
+  - `POST /competitions/{id}/send-notifications` - ручная отправка (admin)
+
+### 3. Школы и филиалы ✅
+
+#### Реализовано:
+- ✅ Список школ с поиском по названию и городу
+- ✅ Детальная страница школы с полной информацией
+- ✅ Кликабельные телефоны (tel:) и email (mailto:)
+- ✅ Социальные сети (VK, Telegram, YouTube, Instagram)
+- ✅ Главный тренер школы на странице школы
+- ✅ Список филиалов школы
+- ✅ Детальная страница филиала
+- ✅ Старший тренер филиала (выделенный блок)
+- ✅ Остальные тренеры филиала (компактный список)
+
+### 4. Профиль тренера ✅
+
+#### Реализовано:
+- ✅ Просмотр информации о тренере
+- ✅ Кликабельные телефон и email
+- ✅ Социальные сети
+- ✅ Информация: возраст, стаж, квалификация, специализация, достижения, биография
+
+### 5. Соревнования ✅
+
+#### Реализовано:
+- ✅ Список соревнований с поиском и фильтрацией
+- ✅ Детальная страница соревнования
+- ✅ Скачивание стартового протокола (PDF)
+- ✅ Скачивание итогового протокола (PDF)
+- ✅ Скачивание результатов (CSV)
+- ✅ Чат соревнования (WebSocket)
+
+### 6. Админ-панель (в разработке) 🚧
+
+#### Реализовано:
+- ✅ Базовая страница с статистикой
+- ✅ Требование авторизации (только ADMIN)
+
+#### Планируется:
+- Управление пользователями
+- Управление школами
+- Управление соревнованиями
+
+## Технический стек
+
+- **Backend:** FastAPI 0.115.0
+- **Database:** PostgreSQL 15 + asyncpg
+- **ORM:** SQLAlchemy 2.0.36
+- **Cache:** Redis
+- **Templates:** Jinja2
+- **Frontend:** Bootstrap 5 + HTMX + Alpine.js
+- **Migrations:** Alembic
+- **Auth:** JWT (HttpOnly cookies) + CSRF
+
+## API Endpoints
+
+### Аутентификация
+- `POST /auth/register` - регистрация
+- `POST /auth/token` - вход
+- `POST /auth/logout` - выход
+- `GET /auth/me` - текущий пользователь
+- `POST /auth/forgot-password` - забыли пароль
+- `POST /auth/reset-password` - сброс пароля
+
+### Спортсмены
+- `GET /athletes/my/personal-bests` - мои рекорды
+- `POST /athletes/my/personal-bests` - добавить рекорд
+- `DELETE /athletes/personal-bests/{id}` - удалить рекорд
+- `GET /athletes/my/profile-data` - мой профиль
+- `PUT /athletes/my/profile` - обновить профиль
+
+### Соревнования
+- `GET /competitions/` - список
+- `GET /competitions/{id}` - детали
+- `GET /competitions/{id}/page` - страница
+- `POST /competitions/{id}/subscribe` - подписка
+- `GET /competitions/{id}/subscription-status` - статус подписки
+- `GET /competitions/{id}/start-list.pdf` - стартовый протокол
+- `GET /competitions/{id}/results.pdf` - итоговый протокол
+- `GET /competitions/{id}/results.csv` - CSV результаты
+
+### Школы
+- `GET /schools/page` - список
+- `GET /schools/search` - поиск
+- `GET /schools/{id}/page` - детали
+- `GET /schools/{id}/branches` - филиалы
+
+### Филиалы
+- `GET /branches/{id}/page` - детали
+- `GET /branches/{id}/coaches` - тренеры филиала
+
+### Тренеры
+- `GET /coaches/{id}/page` - детали
+- `GET /coaches/search` - поиск (в разработке)
+
+### Админ
+- `GET /admin/dashboard` - панель (только ADMIN)
+
+## База данных
+
+### Основные таблицы
+- `user` - пользователи
+- `schools` - школы
+- `branches` - филиалы
+- `coach_profiles` - тренеры
+- `athlete_profiles` - спортсмены
+- `personal_bests` - личные рекорды
+- `competitions` - соревнования
+- `competition_subscriptions` - подписки
+- `chat_messages` - сообщения чата
+
+## Следующие шаги
+
+1. Завершить админ-панель (управление пользователями, школами)
+2. Поиск тренеров с фильтрацией
+3. Рейтинги и таблицы
+4. Календарь соревнований
+5. Фотогалереи
+6. PWA (Progressive Web App)
+
+## Примечания
+
+- Все телефоны и email кликабельны (tel:, mailto:)
+- Поддержка социальных сетей (VK, Telegram, YouTube, Instagram)
+- WebSocket чат в реальном времени
+- Rate limiting для защиты от спама
+- CSRF защита для POST запросов
 ```
 
 ---
@@ -9490,6 +9965,10 @@ aiosmtplib==3.0.2
 ```
 
 ---
+
+## ⚠️ ПРОПУЩЕННЫЕ ФАЙЛЫ
+
+- project_context.md (слишком большой: 316KB)
 
 ---
 
