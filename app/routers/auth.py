@@ -241,3 +241,14 @@ async def change_password(
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     return response
+
+@router.get("/whoami")
+async def whoami(current_user: User = Depends(get_current_user_optional_cookie)):
+    if not current_user:
+        return {"authenticated": False}
+    return {
+        "authenticated": True, 
+        "id": current_user.id,
+        "username": current_user.username, 
+        "role": current_user.role.value
+    }

@@ -1,0 +1,580 @@
+from fastapi import APIRouter, Depends, HTTPException, Request, Form, UploadFile, File
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
+from pydantic import BaseModel
+from datetime import datetime
+
+from app.database import get_db
+from app.services.news_service import NewsService
+from app.models import User, UserRole
+from app.core.dependencies import require_role
+from app.auth import get_current_user_optional_cookie, get_current_active_user
+from app.core.csrf import verify_csrf_token
+
+router = APIRouter(prefix="/news", tags=["news"])
+templates = Jinja2Templates(directory="app/templates")
+
+
+def get_news_service(db: AsyncSession = Depends(get_db)) -> NewsService:
+    return NewsService(db)
+
+
+# Схемы
+class NewsCreate(BaseModel):
+    title: str
+    content: str
+    summary: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
+
+class NewsUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    summary: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
+
+class CommentCreate(BaseModel):
+    content: str
+
+
+# Страницы
+@router.get("/page")
+async def news_page(
+    request: Request,
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    return templates.TemplateResponse(
+        "news_list.html", {"request": request, "current_user": current_user}
+    )
+
+
+@router.get("/search")
+async def search_news(
+    request: Request,
+    q: str = "",
+    sort: str = "newest",
+    page: int = 1,
+    service: NewsService = Depends(get_news_service),
+):
+    result = await service.search_news(q, sort, page)
+    return templates.TemplateResponse(
+        "partials/news_items.html",
+        {
+            "request": request,
+            "news_list": result["items"],
+            "q": q,
+            "page": page,
+            "sort": sort,
+            "total": result["total"],
+            "pages": result["pages"],
+        },
+    )
+
+
+@router.get("/{news_id}")
+async def get_news(
+    news_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user_optional_cookie),
+    service: NewsService = Depends(get_news_service),
+):
+    news = await service.get_news(news_id)
+    if not news:
+        raise HTTPException(status_code=404, detail="News not found")
+
+    user_liked = False
+    if current_user:
+        user_liked = await service.get_user_liked(news_id, current_user.id)
+
+    comments = await service.get_comments(news_id)
+
+    return templates.TemplateResponse(
+        "news_detail.html",
+        {
+            "request": request,
+            "news": news,
+            "current_user": current_user,
+            "user_liked": user_liked,
+            "comments": comments,
+        },
+    )
+
+
+# API эндпоинты
+
+
+@router.post("/")
+async def create_news(
+    data: NewsCreate,
+    current_user: User = Depends(require_role([UserRole.ADMIN])),
+    service: NewsService = Depends(get_news_service),
+):
+    return await service.create_news(
+        title=data.title,
+        content=data.content,
+        summary=data.summary,
+        image_url=data.image_url,
+        video_url=data.video_url,
+        author_id=current_user.id,
+    )
+
+
+@router.post("/{news_id}/publish")
+async def publish_news(
+    news_id: int,
+    current_user: User = Depends(require_role([UserRole.ADMIN])),
+    service: NewsService = Depends(get_news_service),
+):
+    news = await service.publish_news(news_id)
+    if not news:
+        raise HTTPException(status_code=404, detail="News not found")
+    return news
+
+
+@router.post("/{news_id}/like")
+async def toggle_like(
+    news_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    service: NewsService = Depends(get_news_service),
+):
+    verify_csrf_token(request)
+    result = await service.toggle_like(news_id, current_user.id)
+    return JSONResponse(content=result)
+
+
+@router.post("/{news_id}/comments")
+async def add_comment(
+    news_id: int,
+    data: CommentCreate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    service: NewsService = Depends(get_news_service),
+):
+    verify_csrf_token(request)
+    comment = await service.add_comment(news_id, current_user.id, data.content)
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "created_at": comment.created_at.isoformat(),
+        "user_name": current_user.full_name,
+        "user_id": current_user.id,
+    }
+
+
+@router.get("/{news_id}/comments")
+async def get_comments(
+    news_id: int,
+    skip: int = 0,
+    limit: int = 50,
+    service: NewsService = Depends(get_news_service),
+):
+    comments = await service.get_comments(news_id, skip, limit)
+    return [
+        {
+            "id": c.id,
+            "content": c.content,
+            "created_at": c.created_at.isoformat(),
+            "user_id": c.user_id,
+            "user_name": c.user.full_name if c.user else "Unknown",
+        }
+        for c in comments
+    ]
+
+
+@router.delete("/comments/{comment_id}")
+async def delete_comment(
+    comment_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    service: NewsService = Depends(get_news_service),
+):
+    verify_csrf_token(request)
+    is_admin = current_user.role == UserRole.ADMIN
+    deleted = await service.delete_comment(comment_id, current_user.id, is_admin)
+    if not deleted:
+        raise HTTPException(
+            status_code=404, detail="Comment not found or not authorized"
+        )
+    return {"message": "Comment deleted"}
+
+
+@router.put("/{news_id}")
+async def update_news(
+    news_id: int,
+    data: NewsUpdate,
+    current_user: User = Depends(require_role([UserRole.ADMIN])),
+    service: NewsService = Depends(get_news_service),
+):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+    news = await service.update_news(news_id, **update_data)
+    if not news:
+        raise HTTPException(status_code=404, detail="News not found")
+    return news
+
+
+@router.delete("/{news_id}")
+async def delete_news(
+    news_id: int,
+    current_user: User = Depends(require_role([UserRole.ADMIN])),
+    service: NewsService = Depends(get_news_service),
+):
+    deleted = await service.delete_news(news_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="News not found")
+    return {"message": "News deleted successfully"}
+
+# ===== АДМИНСКИЕ ЭНДПОИНТЫ =====
+
+@router.get("/admin/list")
+async def admin_news_list(
+    request: Request,
+    page: int = 1,
+    status: str = "all",
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select, desc, func
+    from app.models import News
+    
+    stmt = select(News)
+    if status == "published":
+        stmt = stmt.where(News.is_published == True)
+    elif status == "draft":
+        stmt = stmt.where(News.is_published == False)
+    
+    stmt = stmt.order_by(desc(News.created_at))
+    
+    limit = 20
+    offset = (page - 1) * limit
+    stmt = stmt.offset(offset).limit(limit)
+    
+    result = await db.execute(stmt)
+    news_list = result.scalars().all()
+    
+    count_stmt = select(func.count()).select_from(News)
+    if status == "published":
+        count_stmt = count_stmt.where(News.is_published == True)
+    elif status == "draft":
+        count_stmt = count_stmt.where(News.is_published == False)
+    total = await db.scalar(count_stmt)
+    
+    return templates.TemplateResponse(
+        "admin/news_list.html",
+        {
+            "request": request,
+            "news_list": news_list,
+            "page": page,
+            "total": total,
+            "pages": (total + limit - 1) // limit if total else 1,
+            "status": status,
+        }
+    )
+
+
+@router.get("/admin/create")
+async def admin_news_create_form(
+    request: Request,
+):
+    return templates.TemplateResponse(
+        "admin/news_form.html",
+        {"request": request, "news": None}
+    )
+
+
+@router.post("/admin/create")
+async def admin_news_create(
+    title: str = Form(..., current_user: User = Depends(get_current_user_optional_cookie), service: NewsService = Depends(get_news_service)),
+    content: str = Form(...),
+    summary: str = Form(None),
+    video_url: str = Form(None),
+    image: UploadFile = File(None),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.news_service import NewsService
+    from app.services.image_service import ImageService
+    
+    service = NewsService(db)
+    
+    image_url = None
+    if image and image.filename:
+        image_url = await ImageService.save_image(image, "news")
+    
+    # Временно без author_id (потом добавим)
+    news = await service.create_news(
+        title=title,
+        content=content,
+        summary=summary,
+        image_url=image_url,
+        video_url=video_url,
+        author_id=current_user.id,
+    )
+    
+    return RedirectResponse(url=f"/news/admin/edit/{news.id}", status_code=303)
+
+
+@router.get("/admin/edit/{news_id}")
+async def admin_news_edit_form(
+    news_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.news_service import NewsService
+    service = NewsService(db)
+    news = await service.get_news(news_id)
+    if not news:
+        raise HTTPException(status_code=404, detail="News not found")
+    
+    return templates.TemplateResponse(
+        "admin/news_form.html",
+        {"request": request, "news": news}
+    )
+
+
+@router.post("/admin/edit/{news_id}")
+async def admin_news_update(
+    news_id: int,
+    title: str = Form(...),
+    content: str = Form(...),
+    summary: str = Form(None),
+    video_url: str = Form(None),
+    image: UploadFile = File(None),
+    delete_image: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.news_service import NewsService
+    from app.services.image_service import ImageService
+    
+    service = NewsService(db)
+    news = await service.get_news(news_id)
+    if not news:
+        raise HTTPException(status_code=404, detail="News not found")
+    
+    update_data = {
+        "title": title,
+        "content": content,
+        "summary": summary,
+        "video_url": video_url,
+    }
+    
+    if delete_image:
+        update_data["image_url"] = None
+    elif image and image.filename:
+        update_data["image_url"] = await ImageService.save_image(image, "news")
+    
+    await service.update_news(news_id, **update_data)
+    return RedirectResponse(url="/news/admin/list", status_code=303)
+
+
+@router.post("/admin/publish/{news_id}")
+async def admin_news_publish(
+    news_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.news_service import NewsService
+    service = NewsService(db)
+    await service.publish_news(news_id)
+    return RedirectResponse(url="/news/admin/list", status_code=303)
+
+
+@router.post("/admin/unpublish/{news_id}")
+async def admin_news_unpublish(
+    news_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.news_service import NewsService
+    service = NewsService(db)
+    await service.update_news(news_id, is_published=False)
+    return RedirectResponse(url="/news/admin/list", status_code=303)
+
+
+@router.post("/admin/delete/{news_id}")
+async def admin_news_delete(
+    news_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.news_service import NewsService
+    service = NewsService(db)
+    await service.delete_news(news_id)
+    return RedirectResponse(url="/news/admin/list", status_code=303)
+
+@router.get("/admin/test")
+async def admin_test(
+    request: Request,
+):
+    return templates.TemplateResponse("admin/test.html", {"request": request})
+
+
+# ===== АДМИНСКИЕ РОУТЫ (РАБОЧАЯ ВЕРСИЯ) =====
+
+@router.get("/admin/list")
+async def admin_news_list(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    from sqlalchemy import select, desc
+    from app.models import News
+    
+    if not current_user or current_user.role != UserRole.ADMIN:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    result = await db.execute(
+        select(News).order_by(desc(News.created_at))
+    )
+    news_list = result.scalars().all()
+    
+    return templates.TemplateResponse(
+        "admin/news_list.html",
+        {"request": request, "news_list": news_list, "current_user": current_user}
+    )
+
+
+@router.get("/admin/create")
+async def admin_news_create_form(
+    request: Request,
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    if not current_user or current_user.role != UserRole.ADMIN:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    return templates.TemplateResponse(
+        "admin/news_form.html",
+        {"request": request, "news": None, "current_user": current_user}
+    )
+
+
+@router.post("/admin/create")
+async def admin_news_create(
+    request: Request,
+    title: str = Form(...),
+    content: str = Form(...),
+    summary: str = Form(None),
+    video_url: str = Form(None),
+    image: UploadFile = File(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    from app.services.news_service import NewsService
+    from app.services.image_service import ImageService
+    
+    if not current_user or current_user.role != UserRole.ADMIN:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    service = NewsService(db)
+    
+    image_url = None
+    if image and image.filename:
+        image_url = await ImageService.save_image(image, "news")
+    
+    news = await service.create_news(
+        title=title,
+        content=content,
+        summary=summary,
+        image_url=image_url,
+        video_url=video_url,
+        author_id=current_user.id,
+    )
+    
+    return RedirectResponse(url=f"/news/admin/edit/{news.id}", status_code=303)
+
+
+@router.get("/admin/edit/{news_id}")
+async def admin_news_edit_form(
+    news_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    from app.services.news_service import NewsService
+    
+    if not current_user or current_user.role != UserRole.ADMIN:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    service = NewsService(db)
+    news = await service.get_news(news_id)
+    
+    return templates.TemplateResponse(
+        "admin/news_form.html",
+        {"request": request, "news": news, "current_user": current_user}
+    )
+
+
+@router.post("/admin/edit/{news_id}")
+async def admin_news_update(
+    news_id: int,
+    title: str = Form(...),
+    content: str = Form(...),
+    summary: str = Form(None),
+    video_url: str = Form(None),
+    image: UploadFile = File(None),
+    delete_image: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    from app.services.news_service import NewsService
+    from app.services.image_service import ImageService
+    
+    if not current_user or current_user.role != UserRole.ADMIN:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    service = NewsService(db)
+    
+    update_data = {
+        "title": title,
+        "content": content,
+        "summary": summary,
+        "video_url": video_url,
+    }
+    
+    if delete_image:
+        update_data["image_url"] = None
+    elif image and image.filename:
+        update_data["image_url"] = await ImageService.save_image(image, "news")
+    
+    await service.update_news(news_id, **update_data)
+    return RedirectResponse(url="/news/admin/list", status_code=303)
+
+
+@router.post("/admin/toggle/{news_id}")
+async def admin_news_toggle(
+    news_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    from app.services.news_service import NewsService
+    
+    if not current_user or current_user.role != UserRole.ADMIN:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    service = NewsService(db)
+    news = await service.get_news(news_id)
+    
+    if news.is_published:
+        await service.update_news(news_id, is_published=False)
+    else:
+        await service.publish_news(news_id)
+    
+    return RedirectResponse(url="/news/admin/list", status_code=303)
+
+
+@router.post("/admin/delete/{news_id}")
+async def admin_news_delete(
+    news_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_optional_cookie),
+):
+    from app.services.news_service import NewsService
+    
+    if not current_user or current_user.role != UserRole.ADMIN:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    service = NewsService(db)
+    await service.delete_news(news_id)
+    return RedirectResponse(url="/news/admin/list", status_code=303)

@@ -288,6 +288,7 @@ class ChatMessage(Base):
 
 
 class News(Base):
+    comments_count: int = 0  # не в БД, только для шаблона
     __tablename__ = "news"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

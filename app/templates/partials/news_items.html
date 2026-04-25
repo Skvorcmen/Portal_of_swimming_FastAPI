@@ -1,23 +1,46 @@
 {% for news in news_list %}
 <div class="card mb-4 shadow-sm">
     <div class="row g-0">
-        {% if news.image_url %}
+        <!-- Показываем медиа-блок ТОЛЬКО если есть картинка ИЛИ видео -->
+        {% if news.image_url or news.video_url %}
         <div class="col-md-4">
-            <img src="{{ news.image_url }}" class="img-fluid rounded-start" style="height: 200px; width: 100%; object-fit: cover;" alt="{{ news.title }}">
+            {% if news.image_url %}
+            <img src="{{ news.image_url }}" class="img-fluid rounded-start w-100 h-100" style="object-fit: cover; min-height: 180px;" alt="{{ news.title }}">
+            {% elif news.video_url %}
+            {% set video_id = news.video_url.split('v=')[-1].split('&')[0] %}
+            <div class="position-relative bg-dark d-flex align-items-center justify-content-center rounded-start w-100 h-100" style="min-height: 180px;">
+                <img src="https://img.youtube.com/vi/{{ video_id }}/mqdefault.jpg" 
+                     class="img-fluid w-100 h-100" style="object-fit: cover;"
+                     alt="{{ news.title }}">
+                <div class="position-absolute top-50 start-50 translate-middle">
+                    <i class="fab fa-youtube fa-3x text-white" style="text-shadow: 0 0 10px rgba(0,0,0,0.5);"></i>
+                </div>
+            </div>
+            {% endif %}
         </div>
         <div class="col-md-8">
         {% else %}
         <div class="col-md-12">
         {% endif %}
             <div class="card-body">
-                <h5 class="card-title">{{ news.title }}</h5>
-                <p class="card-text">{{ news.summary or news.content[:150] }}...</p>
-                <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 class="card-title mb-2">{{ news.title }}</h5>
+                    {% if news.video_url and not news.image_url %}
+                    <span class="badge bg-danger"><i class="fab fa-youtube"></i> Видео</span>
+                    {% elif news.image_url %}
+                    <span class="badge bg-primary"><i class="fas fa-image"></i> Фото</span>
+                    {% endif %}
+                </div>
+                
+                <p class="card-text text-muted">{{ news.summary[:200] if news.summary else news.content[:200]|striptags }}{% if (news.summary or news.content)|length > 200 %}...{% endif %}</p>
+                
+                <div class="d-flex justify-content-between align-items-center mt-3">
                     <div>
                         <small class="text-muted">
                             <i class="fas fa-user"></i> {{ news.author.full_name if news.author else 'Админ' }}
                             <i class="fas fa-calendar ms-2"></i> {{ news.published_at.strftime('%d.%m.%Y') if news.published_at else 'Черновик' }}
                             <i class="fas fa-heart text-danger ms-2"></i> {{ news.likes_count }}
+                            <i class="fas fa-comment text-primary ms-2"></i> {{ news.comments_count }}
                         </small>
                     </div>
                     <a href="/news/{{ news.id }}" class="btn btn-sm btn-primary">Читать →</a>

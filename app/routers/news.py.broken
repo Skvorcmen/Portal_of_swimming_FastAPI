@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Form, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime
 
 from app.database import get_db
 from app.services.news_service import NewsService
 from app.services.image_service import ImageService
 from app.models import User, UserRole
-from app.auth import get_current_user_optional_cookie, get_current_user_optional_cookie
+from app.auth import get_current_user_optional_cookie, get_current_active_user
+from app.core.csrf import verify_csrf_token
 
 router = APIRouter(prefix="/news", tags=["news"])
 templates = Jinja2Templates(directory="app/templates")
@@ -19,10 +21,28 @@ def get_news_service(db: AsyncSession = Depends(get_db)) -> NewsService:
     return NewsService(db)
 
 
+# Схемы
+class NewsCreate(BaseModel):
+    title: str
+    content: str
+    summary: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
+
+class NewsUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    summary: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
+
 class CommentCreate(BaseModel):
     content: str
 
 
+# Публичные страницы
 @router.get("/page")
 async def news_page(request: Request, current_user: User = Depends(get_current_user_optional_cookie)):
     return templates.TemplateResponse("news_list.html", {"request": request, "current_user": current_user})
@@ -31,9 +51,6 @@ async def news_page(request: Request, current_user: User = Depends(get_current_u
 @router.get("/search")
 async def search_news(request: Request, q: str = "", sort: str = "newest", page: int = 1, service: NewsService = Depends(get_news_service)):
     result = await service.search_news(q, sort, page)
-    # Добавляем количество комментариев для каждой новости
-    for news in result["items"]:
-        news.comments_count = await service.get_comments_count(news.id)
     return templates.TemplateResponse("partials/news_items.html", {"request": request, "news_list": result["items"], "q": q, "page": page, "sort": sort, "total": result["total"], "pages": result["pages"]})
 
 
@@ -49,14 +66,18 @@ async def get_news(news_id: int, request: Request, current_user: User = Depends(
     return templates.TemplateResponse("news_detail.html", {"request": request, "news": news, "current_user": current_user, "user_liked": user_liked, "comments": comments})
 
 
+# API эндпоинты
 @router.post("/{news_id}/like")
-async def toggle_like(news_id: int, request: Request, current_user: User = Depends(get_current_user_optional_cookie), service: NewsService = Depends(get_news_service)):
+async def toggle_like(news_id: int, request: Request, current_user: User = Depends(get_current_active_user), service: NewsService = Depends(get_news_service)):
+    # # verify_csrf_token(request)  # временно отключено для теста
     result = await service.toggle_like(news_id, current_user.id)
     return JSONResponse(content=result)
 
 
 @router.post("/{news_id}/comments")
-async def add_comment(news_id: int, data: CommentCreate, request: Request, current_user: User = Depends(get_current_user_optional_cookie), service: NewsService = Depends(get_news_service)):
+async def add_comment(
+    logger.info(f"🔵 Получен комментарий от пользователя {current_user.id if current_user else None}")news_id: int, data: CommentCreate, request: Request, current_user: User = Depends(get_current_active_user), service: NewsService = Depends(get_news_service)):
+    # # verify_csrf_token(request)  # временно отключено для теста
     comment = await service.add_comment(news_id, current_user.id, data.content)
     return {"id": comment.id, "content": comment.content, "created_at": comment.created_at.isoformat(), "user_name": current_user.full_name, "user_id": current_user.id}
 
@@ -68,7 +89,8 @@ async def get_comments(news_id: int, skip: int = 0, limit: int = 50, service: Ne
 
 
 @router.delete("/comments/{comment_id}")
-async def delete_comment(comment_id: int, request: Request, current_user: User = Depends(get_current_user_optional_cookie), service: NewsService = Depends(get_news_service)):
+async def delete_comment(comment_id: int, request: Request, current_user: User = Depends(get_current_active_user), service: NewsService = Depends(get_news_service)):
+    # # verify_csrf_token(request)  # временно отключено для теста
     is_admin = current_user.role == UserRole.ADMIN
     deleted = await service.delete_comment(comment_id, current_user.id, is_admin)
     if not deleted:
@@ -76,7 +98,7 @@ async def delete_comment(comment_id: int, request: Request, current_user: User =
     return {"message": "Comment deleted"}
 
 
-# АДМИНСКИЕ РОУТЫ
+# ===== АДМИНСКИЕ РОУТЫ =====
 @router.get("/admin/list")
 async def admin_news_list(request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user_optional_cookie)):
     from sqlalchemy import select, desc
@@ -150,3 +172,7 @@ async def admin_news_delete(news_id: int, db: AsyncSession = Depends(get_db), cu
     service = NewsService(db)
     await service.delete_news(news_id)
     return RedirectResponse(url="/news/admin/list", status_code=303)
+
+# Временное логирование для отладки
+import logging
+logger = logging.getLogger(__name__)

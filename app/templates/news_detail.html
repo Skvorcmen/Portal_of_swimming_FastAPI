@@ -3,43 +3,122 @@
 {% block content %}
 <div class="row">
     <div class="col-md-8 mx-auto">
-        <div class="card">
+        <article class="card shadow-sm">
+            {% if news.image_url %}
+            <img src="{{ news.image_url }}" class="card-img-top" alt="{{ news.title }}" style="max-height: 400px; object-fit: cover;">
+            {% endif %}
+            
             <div class="card-body">
-                <h1>{{ news.title }}</h1>
-                <p class="text-muted">
-                    {{ news.published_at.strftime('%d.%m.%Y') if news.published_at else 'Черновик' }}
-                </p>
-                <hr>
-                <div class="mt-3">
-                    {{ news.content | safe }}
+                <h1 class="card-title">{{ news.title }}</h1>
+                
+                <div class="d-flex justify-content-between align-items-center mb-3 text-muted">
+                    <div>
+                        <i class="fas fa-user"></i> {{ news.author.full_name if news.author else 'Админ' }}
+                        <i class="fas fa-calendar ms-3"></i> {{ news.published_at.strftime('%d.%m.%Y %H:%M') if news.published_at else 'Черновик' }}
+                    </div>
+                    <div>
+                        <button onclick="toggleLike({{ news.id }})" id="likeBtn" class="btn btn-sm {% if user_liked %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                            <i class="fas fa-heart"></i> <span id="likesCount">{{ news.likes_count }}</span>
+                        </button>
+                    </div>
                 </div>
-                <div class="mt-4">
-                    <a href="/news/page" class="btn btn-secondary">← Назад к новостям</a>
-                    
-                    {% if current_user and current_user.role == 'admin' %}
-                    <button onclick="deleteNews({{ news.id }})" class="btn btn-danger float-end">
-                        <i class="fas fa-trash"></i> Удалить
-                    </button>
-                    {% endif %}
+                
+                {% if news.video_url %}
+                <div class="ratio ratio-16x9 mb-4">
+                    {% set video_id = news.video_url.split('v=')[-1].split('&')[0] %}
+                    <iframe src="https://www.youtube.com/embed/{{ video_id }}" allowfullscreen></iframe>
                 </div>
+                {% endif %}
+                
+                <div class="news-content">{{ news.content | safe }}</div>
             </div>
+        </article>
+        
+        <!-- Комментарии -->
+        <div class="card mt-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">💬 Комментарии (<span id="commentsCount">0</span>)</h5>
+            </div>
+            <div class="card-body">
+                {% if current_user %}
+                <div class="mb-3">
+                    <textarea id="commentText" class="form-control" rows="2" placeholder="Напишите комментарий..."></textarea>
+                    <button onclick="addComment()" class="btn btn-primary mt-2">Отправить</button>
+                </div>
+                {% else %}
+                <div class="alert alert-info"><a href="/login">Войдите</a> чтобы оставить комментарий</div>
+                {% endif %}
+                
+                <div id="commentsList"></div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-3">
+            <a href="/news/page" class="btn btn-secondary">← Назад</a>
         </div>
     </div>
 </div>
 
 <script>
-function deleteNews(newsId) {
-    if (confirm('Удалить эту новость?')) {
-        const token = document.cookie.match(/access_token=([^;]+)/)?.[1];
-        fetch(`/news/${newsId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        }).then(() => {
-            window.location.href = '/news/page';
-        });
-    }
+function toggleLike(newsId) {
+    fetch(`/news/${newsId}/like`, {
+        method: 'POST',
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('likesCount').innerText = data.likes_count;
+        const btn = document.getElementById('likeBtn');
+        if (data.liked) {
+            btn.classList.remove('btn-outline-danger');
+            btn.classList.add('btn-danger');
+        } else {
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-outline-danger');
+        }
+    });
 }
+
+function loadComments() {
+    fetch(`/news/{{ news.id }}/comments`)
+        .then(res => res.json())
+        .then(comments => {
+            const container = document.getElementById('commentsList');
+            const countSpan = document.getElementById('commentsCount');
+            countSpan.innerText = comments.length;
+            
+            if (comments.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center">Пока нет комментариев</p>';
+                return;
+            }
+            
+            container.innerHTML = comments.map(c => `
+                <div class="border-bottom pb-2 mb-2">
+                    <strong>${c.user_name}</strong>
+                    <small class="text-muted float-end">${new Date(c.created_at).toLocaleString('ru-RU')}</small>
+                    <p class="mb-1">${c.content}</p>
+                </div>
+            `).join('');
+        });
+}
+
+function addComment() {
+    const content = document.getElementById('commentText').value.trim();
+    if (!content) return;
+    
+    fetch(`/news/{{ news.id }}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content }),
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(() => {
+        document.getElementById('commentText').value = '';
+        loadComments();
+    });
+}
+
+loadComments();
 </script>
 {% endblock %}

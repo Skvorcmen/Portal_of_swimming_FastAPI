@@ -34,7 +34,7 @@ class NewsService:
         )
 
     async def get_news(self, news_id: int) -> Optional[News]:
-        return await self.repo.get_by_id(news_id)
+        return await self.repo.get_by_id_with_details(news_id)
 
     async def get_news_with_details(self, news_id: int) -> Optional[News]:
         return await self.repo.get_by_id_with_details(news_id)
@@ -75,3 +75,6 @@ class NewsService:
             )
         )
         return result.scalar_one_or_none() is not None
+
+    async def get_comments_count(self, news_id: int) -> int:
+        return await self.repo.get_comments_count(news_id)

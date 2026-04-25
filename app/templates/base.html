@@ -36,6 +36,16 @@
                     <li class="nav-item"><a class="nav-link" href="/register">Регистрация</a></li>
                     <li class="nav-item"><a class="nav-link" href="/profile">Профиль</a></li>
                     <li class="nav-item"><a class="nav-link" href="/coach/dashboard"><i class="fas fa-chalkboard-user"></i> Мои ученики</a></li>
+                    {% if current_user and current_user.role == "admin" %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog"></i> Админка
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/news/admin/list"><i class="fas fa-newspaper"></i> Управление новостями</a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -94,3 +104,32 @@
 
 </body>
 </html>
+
+<script>
+// Добавляем пункт меню для админа после загрузки страницы
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/auth/me', { credentials: 'include' })
+        .then(res => res.json())
+        .then(user => {
+            if (user.role === 'admin') {
+                const navMenu = document.querySelector('.navbar-nav.ms-auto');
+                if (navMenu && !document.querySelector('.admin-menu-item')) {
+                    const adminLi = document.createElement('li');
+                    adminLi.className = 'nav-item admin-menu-item';
+                    adminLi.innerHTML = '<a class="nav-link" href="/news/admin/list"><i class="fas fa-cog"></i> Админка</a>';
+                    navMenu.appendChild(adminLi);
+                }
+            }
+        })
+        .catch(() => {});
+});
+</script>
+
+<!-- Добавляем пункт меню Админка -->
+{% if current_user and current_user.role == 'admin' %}
+<li class="nav-item">
+    <a class="nav-link text-warning" href="/news/admin/list">
+        <i class="fas fa-crown"></i> Админка
+    </a>
+</li>
+{% endif %}

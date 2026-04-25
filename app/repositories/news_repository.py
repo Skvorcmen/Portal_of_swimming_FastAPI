@@ -38,7 +38,8 @@ class NewsRepository(BaseRepository[News]):
     async def search(
         self, query: str = "", sort: str = "newest", page: int = 1, limit: int = 10
     ) -> dict:
-        stmt = select(News).where(News.is_published == True).options(selectinload(News.author))
+        from sqlalchemy.orm import selectinload
+        stmt = select(News).options(selectinload(News.author)).where(News.is_published == True).options(selectinload(News.author))
 
         if query:
             stmt = stmt.where(
@@ -136,3 +137,11 @@ class NewsRepository(BaseRepository[News]):
         await self.session.delete(comment)
         await self.session.commit()
         return True
+
+    async def get_comments_count(self, news_id: int) -> int:
+        """Получить количество комментариев к новости"""
+        from sqlalchemy import func
+        result = await self.session.execute(
+            select(func.count()).select_from(NewsComment).where(NewsComment.news_id == news_id)
+        )
+        return result.scalar() or 0

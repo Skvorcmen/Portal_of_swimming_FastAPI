@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h4>{% if news %}✏️ Редактирование{% else %}➕ Создание{% endif %} новости</h4>
+        </div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label>Заголовок *</label>
+                    <input type="text" name="title" class="form-control" value="{{ news.title if news else '' }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label>Краткое описание</label>
+                    <textarea name="summary" class="form-control" rows="2">{{ news.summary if news else '' }}</textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label>Содержание *</label>
+                    <textarea name="content" class="form-control" rows="10" required>{{ news.content if news else '' }}</textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label>Картинка</label>
+                    {% if news and news.image_url %}
+                    <div class="mb-2">
+                        <img src="{{ news.image_url }}" style="max-height: 100px;">
+                        <div class="form-check">
+                            <input type="checkbox" name="delete_image" class="form-check-input" value="true">
+                            <label>Удалить картинку</label>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <input type="file" name="image" class="form-control" accept="image/*">
+                </div>
+                
+                <div class="mb-3">
+                    <label>YouTube видео (ссылка)</label>
+                    <input type="url" name="video_url" class="form-control" value="{{ news.video_url if news else '' }}">
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+                <a href="/news/admin/list" class="btn btn-secondary">Отмена</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
