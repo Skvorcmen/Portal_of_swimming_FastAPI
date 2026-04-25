@@ -1,33 +1,58 @@
 {% for news in news_list %}
-<div class="card mb-3">
-    <div class="card-body">
-        <h5 class="card-title">{{ news.title }}</h5>
-        <p class="card-text">{{ news.content[:200] }}...</p>
-        <small class="text-muted">{{ news.published_at.strftime('%d.%m.%Y') if news.published_at else 'Черновик' }}</small>
-        <a href="/news/{{ news.id }}" class="btn btn-sm btn-primary float-end ms-2">Читать</a>
-        
-        <!-- Кнопка удаления только для админа -->
-        {% if current_user and current_user.role == 'ADMIN' %}
-        <button class="btn btn-sm btn-danger float-end" onclick="deleteNews({{ news.id }})">Удалить</button>
+<div class="card mb-4 shadow-sm">
+    <div class="row g-0">
+        {% if news.image_url %}
+        <div class="col-md-4">
+            <img src="{{ news.image_url }}" class="img-fluid rounded-start" style="height: 200px; width: 100%; object-fit: cover;" alt="{{ news.title }}">
+        </div>
+        <div class="col-md-8">
+        {% else %}
+        <div class="col-md-12">
         {% endif %}
+            <div class="card-body">
+                <h5 class="card-title">{{ news.title }}</h5>
+                <p class="card-text">{{ news.summary or news.content[:150] }}...</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <small class="text-muted">
+                            <i class="fas fa-user"></i> {{ news.author.full_name if news.author else 'Админ' }}
+                            <i class="fas fa-calendar ms-2"></i> {{ news.published_at.strftime('%d.%m.%Y') if news.published_at else 'Черновик' }}
+                            <i class="fas fa-heart text-danger ms-2"></i> {{ news.likes_count }}
+                        </small>
+                    </div>
+                    <a href="/news/{{ news.id }}" class="btn btn-sm btn-primary">Читать →</a>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% else %}
-<div class="alert alert-info">Новостей не найдено</div>
+<div class="alert alert-info text-center">
+    <i class="fas fa-newspaper fa-2x mb-2 d-block"></i>
+    Новостей не найдено
+</div>
 {% endfor %}
 
+{% if pages > 1 %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% for p in range(1, pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="#" onclick="loadPage({{ p }}); return false;">{{ p }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</nav>
+{% endif %}
+
 <script>
-function deleteNews(newsId) {
-    if (confirm('Удалить эту новость?')) {
-        const token = document.cookie.match(/access_token=([^;]+)/)?.[1];
-        fetch(`/news/${newsId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        }).then(() => {
-            location.reload();
+function loadPage(page) {
+    const q = encodeURIComponent(document.getElementById('searchInput').value);
+    const sort = document.getElementById('sortSelect').value;
+    fetch(`/news/search?q=${q}&sort=${sort}&page=${page}`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('newsList').innerHTML = html;
         });
-    }
 }
 </script>

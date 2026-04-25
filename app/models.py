@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, date
 from typing import Optional, List
-from sqlalchemy import String, Integer, Boolean, DateTime, Date, Enum, ForeignKey, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, Date, Enum, ForeignKey, Float, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -293,15 +293,17 @@ class News(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     content: Mapped[str] = mapped_column(String(5000), nullable=False)
+    summary: Mapped[str] = mapped_column(String(500), nullable=True)
+    image_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    video_url: Mapped[str] = mapped_column(String(500), nullable=True)
     author_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    likes_count: Mapped[int] = mapped_column(Integer, default=0)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     author: Mapped[Optional["User"]] = relationship("User", backref="news")
-
-
 class Article(Base):
     __tablename__ = "articles"
 
@@ -343,3 +345,34 @@ class CompetitionSubscription(Base):
 
     user: Mapped["User"] = relationship("User", backref="subscriptions")
     competition: Mapped["Competition"] = relationship("Competition", backref="subscribers")
+
+# Добавляем поле likes_count в News (найдем класс News и добавим)
+# Временно создадим патч для обновления модели
+
+
+class NewsComment(Base):
+    __tablename__ = "news_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    news_id: Mapped[int] = mapped_column(Integer, ForeignKey("news.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+
+    news: Mapped["News"] = relationship("News", backref="comments")
+    user: Mapped["User"] = relationship("User", backref="news_comments")
+
+
+class NewsLike(Base):
+    __tablename__ = "news_likes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    news_id: Mapped[int] = mapped_column(Integer, ForeignKey("news.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    news: Mapped["News"] = relationship("News", backref="likes")
+    user: Mapped["User"] = relationship("User", backref="news_likes")
+
+    __table_args__ = (UniqueConstraint("news_id", "user_id", name="unique_news_user_like"),)
