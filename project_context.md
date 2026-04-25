@@ -30,7 +30,6 @@
   ├── database.py
   ├── main.py
   ├── models.py
-  ├── models_new.py
   ├── repositories/
     ├── __init__.py
     ├── age_category_repository.py
@@ -53,7 +52,6 @@
     ├── age_categories.py
     ├── articles.py
     ├── athletes.py
-    ├── athletes_fix.py
     ├── auth.py
     ├── branches.py
     ├── chat.py
@@ -122,7 +120,7 @@
     ├── register.html
     ├── school_detail.html
     ├── schools_list.html
-    ├── test.html
+├── create_test_data.py
 ├── docker-compose.yml
 ├── docs/
   ├── COMPLETED_FEATURES.md
@@ -137,9 +135,11 @@
     ├── register.md
     ├── school-detail.md
     ├── schools-list.md
+├── init_db.py
 ├── init_production_db.py
 ├── project_context.md
 ├── requirements.txt
+├── seed_data.py
 ```
 
 ---
@@ -231,12 +231,11 @@ datefmt = %H:%M:%S
 ### `app/auth.py`
 
 ```python
-from jose import JWTError, jwt
 from app.core.config import settings
+from jose import JWTError, jwt
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
@@ -244,7 +243,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import User
-from app.core.config import settings
 from app.repositories.user_repository import UserRepository
 
 SECRET_KEY = settings.SECRET_KEY
@@ -330,16 +328,15 @@ async def get_current_user_optional_cookie(
     request: Request,
     db: AsyncSession = Depends(get_db),
     token: Optional[str] = Depends(oauth2_scheme),
-) -> User:
-    """Поддерживает оба способа: cookie ИЛИ Bearer токен"""
+) -> Optional[User]:
+    """Поддерживает оба способа: cookie ИЛИ Bearer токен, возвращает None если нет"""
     raw_token = request.cookies.get("access_token") or token
     if not raw_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return await _get_user_by_token(raw_token, db)
+        return None
+    try:
+        return await _get_user_by_token(raw_token, db)
+    except HTTPException:
+        return None
 
 
 async def get_current_active_user(
@@ -370,18 +367,6 @@ async def get_current_user_from_websocket(
     repo = UserRepository(db)
     user = await repo.get_by_id(user_id)
     return user
-
-
-async def get_current_user_from_cookie(request: Request, db: AsyncSession) -> Optional[User]:
-    """Получает пользователя из HttpOnly cookie (для ручного использования)"""
-    token = request.cookies.get("access_token")
-    if not token:
-        return None
-    
-    try:
-        return await _get_user_by_token(token, db)
-    except HTTPException:
-        return None
 ```
 
 ---
@@ -389,38 +374,47 @@ async def get_current_user_from_cookie(request: Request, db: AsyncSession) -> Op
 ### `app/core/blocklist.py`
 
 ```python
-from datetime import datetime, timedelta
-from collections import defaultdict
+import redis.asyncio as redis
+from app.core.config import settings
 
-# Хранилище заблокированных IP (в продакшене использовать Redis)
-blocked_ips = {}
-failed_attempts = defaultdict(int)
-
-
-def is_ip_blocked(ip: str) -> bool:
-    """Проверка, заблокирован ли IP"""
-    if ip in blocked_ips:
-        if blocked_ips[ip] > datetime.now():
-            return True
-        else:
-            del blocked_ips[ip]
-    return False
-
-
-def record_failed_attempt(ip: str) -> bool:
-    """Запись неудачной попытки. Возвращает True если IP заблокирован"""
-    failed_attempts[ip] += 1
+class BlocklistService:
+    def __init__(self):
+        self.redis_client = None
     
-    if failed_attempts[ip] >= 10:
-        blocked_ips[ip] = datetime.now() + timedelta(minutes=15)
-        return True
-    return False
+    async def get_redis(self):
+        if self.redis_client is None:
+            self.redis_client = await redis.from_url(settings.REDIS_URL, decode_responses=True)
+        return self.redis_client
+    
+    async def is_ip_blocked(self, ip: str) -> bool:
+        r = await self.get_redis()
+        blocked = await r.get(f"blocked:{ip}")
+        return blocked is not None
+    
+    async def record_failed_attempt(self, ip: str) -> bool:
+        r = await self.get_redis()
+        key = f"failed:{ip}"
+        attempts = await r.incr(key)
+        await r.expire(key, 900)
+        if attempts >= 10:
+            await r.setex(f"blocked:{ip}", 900, "1")
+            return True
+        return False
+    
+    async def reset_attempts(self, ip: str) -> None:
+        r = await self.get_redis()
+        await r.delete(f"failed:{ip}")
 
+blocklist_service = BlocklistService()
 
-def reset_attempts(ip: str) -> None:
-    """Сброс счётчика попыток"""
-    if ip in failed_attempts:
-        del failed_attempts[ip]
+async def is_ip_blocked(ip: str) -> bool:
+    return await blocklist_service.is_ip_blocked(ip)
+
+async def record_failed_attempt(ip: str) -> bool:
+    return await blocklist_service.record_failed_attempt(ip)
+
+async def reset_attempts(ip: str) -> None:
+    await blocklist_service.reset_attempts(ip)
 ```
 
 ---
@@ -520,6 +514,9 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = ""
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     model_config = ConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -818,30 +815,19 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from app.routers import auth
-from app.routers import branches
 from app.core.exceptions import BusinessError
 from app.routers import competitions
-from app.routers import branches
 from app.routers import age_categories
-from app.routers import branches
 from app.routers import swim_events
 from app.routers import branches
 from app.routers import entries
-from app.routers import branches
 from app.routers import heats
-from app.routers import branches
 from app.routers import chat
-from app.routers import branches
 from app.routers import news, articles
-from app.routers import branches
 from app.routers import schools, coaches
-from app.routers import branches
 from app.routers import coach_profiles
-from app.routers import branches
 from app.routers import athletes
-from app.routers import branches
 from app.routers import coach_dashboard
-from app.routers import branches
 from app.core.rate_limit import setup_rate_limit
 from app.core.blocklist import is_ip_blocked
 from app.models import User
@@ -928,7 +914,8 @@ async def test_page(request: Request):
 @app.middleware("http")
 async def blocklist_middleware(request: Request, call_next):
     ip = request.client.host
-    if is_ip_blocked(ip):
+    from app.core.blocklist import blocklist_service
+    if await blocklist_service.is_ip_blocked(ip):
         return JSONResponse(
             status_code=429, content={"detail": "IP blocked for 15 minutes"}
         )
@@ -966,7 +953,7 @@ async def profile_page(
 ### `app/models.py`
 
 ```python
-from datetime import datetime, timezone, date, date, date
+from datetime import datetime, timezone, date
 from typing import Optional, List
 from sqlalchemy import String, Integer, Boolean, DateTime, Date, Enum, ForeignKey, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -987,12 +974,8 @@ class User(Base):
     __tablename__ = "user"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    email: Mapped[str] = mapped_column(
-        String(100), unique=True, index=True, nullable=False
-    )
-    username: Mapped[str] = mapped_column(
-        String(50), unique=True, index=True, nullable=False
-    )
+    email: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.GUEST)
@@ -1016,19 +999,11 @@ class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    token: Mapped[str] = mapped_column(
-        String(500), unique=True, nullable=False, index=True
-    )
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    token: Mapped[str] = mapped_column(String(500), unique=True, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", back_populates="refresh_tokens")
 
@@ -1040,291 +1015,137 @@ class School(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     full_name: Mapped[str] = mapped_column(String(500), nullable=True)
     description: Mapped[str] = mapped_column(String(2000), nullable=True)
-
-    # НОВЫЕ ПОЛЯ
-    founder: Mapped[str] = mapped_column(String(200), nullable=True)  # Основатель
-    founded_year: Mapped[int] = mapped_column(Integer, nullable=True)  # Год основания
+    founder: Mapped[str] = mapped_column(String(200), nullable=True)
+    founded_year: Mapped[int] = mapped_column(Integer, nullable=True)
     city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
-    address: Mapped[str] = mapped_column(String(500), nullable=True)  # Нынешний адрес
+    address: Mapped[str] = mapped_column(String(500), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
-
-
-    email: Mapped[str] = mapped_column(String(100), nullable=True)
-    # Социальные сети
-    vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
-    telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
-    youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
-    instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
-    phone: Mapped[str] = mapped_column(String(20), nullable=True)
-
-
     email: Mapped[str] = mapped_column(String(100), nullable=True)
     website: Mapped[str] = mapped_column(String(200), nullable=True)
-    # Социальные сети
     vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
     telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
     instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
-    phone: Mapped[str] = mapped_column(String(20), nullable=True)
-
-
-
-    # ИЗОБРАЖЕНИЯ
-    logo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Логотип
-    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Обложка школы
-
+    logo_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # Связи
-    branches: Mapped[list["Branch"]] = relationship(
-        "Branch", back_populates="school", cascade="all, delete-orphan"
-    )
-    athletes: Mapped[list["AthleteProfile"]] = relationship(
-        "AthleteProfile", back_populates="school"
-    )
-    coaches: Mapped[list["CoachProfile"]] = relationship(
-        "CoachProfile", back_populates="school"
-    )
+    branches: Mapped[list["Branch"]] = relationship("Branch", back_populates="school", cascade="all, delete-orphan")
+    athletes: Mapped[list["AthleteProfile"]] = relationship("AthleteProfile", back_populates="school")
+    coaches: Mapped[list["CoachProfile"]] = relationship("CoachProfile", back_populates="school")
 
 
 class Branch(Base):
     __tablename__ = "branches"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    school_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("schools.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    school_id: Mapped[int] = mapped_column(Integer, ForeignKey("schools.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
-
-
     email: Mapped[str] = mapped_column(String(100), nullable=True)
-    # Социальные сети
     vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
     telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
     instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
-    phone: Mapped[str] = mapped_column(String(20), nullable=True)
-
-
-
-    # НОВОЕ ПОЛЕ - обложка филиала (если нет - берется от школы)
     cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
-
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     school: Mapped["School"] = relationship("School", back_populates="branches")
-    athletes: Mapped[list["AthleteProfile"]] = relationship(
-        "AthleteProfile", back_populates="branch"
-    )
-    coaches: Mapped[list["CoachProfile"]] = relationship(
-        "CoachProfile", back_populates="branch"
-    )
+    athletes: Mapped[list["AthleteProfile"]] = relationship("AthleteProfile", back_populates="branch")
+    coaches: Mapped[list["CoachProfile"]] = relationship("CoachProfile", back_populates="branch")
 
 
 class CoachProfile(Base):
     __tablename__ = "coach_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("user.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-    school_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("schools.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    branch_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("branches.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
-    # ИЗОБРАЖЕНИЯ
-    photo_url: Mapped[str] = mapped_column(String(500), nullable=True)  # Аватар тренера
-    cover_url: Mapped[str] = mapped_column(
-        String(500), nullable=True
-    )  # Обложка (берется от школы если не указана)
-
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    school_id: Mapped[int] = mapped_column(Integer, ForeignKey("schools.id", ondelete="SET NULL"), nullable=True, index=True)
+    branch_id: Mapped[int] = mapped_column(Integer, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True)
+    photo_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
     bio: Mapped[str] = mapped_column(String(1000), nullable=True)
     birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-
     qualification: Mapped[str] = mapped_column(String(100), nullable=True)
     experience_years: Mapped[int] = mapped_column(Integer, default=0)
     specialization: Mapped[str] = mapped_column(String(200), nullable=True)
     is_head_coach: Mapped[bool] = mapped_column(Boolean, default=False)
     achievements: Mapped[str] = mapped_column(String(1000), nullable=True)
-    # Социальные сети
     vk_url: Mapped[str] = mapped_column(String(200), nullable=True)
     telegram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     youtube_url: Mapped[str] = mapped_column(String(200), nullable=True)
     instagram_url: Mapped[str] = mapped_column(String(200), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=True)
     contact_email: Mapped[str] = mapped_column(String(100), nullable=True)
-
-
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", back_populates="coach_profile")
-    school: Mapped[Optional["School"]] = relationship(
-        "School", back_populates="coaches"
-    )
-    branch: Mapped[Optional["Branch"]] = relationship(
-        "Branch", back_populates="coaches"
-    )
-    athletes: Mapped[list["AthleteProfile"]] = relationship(
-        "AthleteProfile", back_populates="coach"
-    )
+    school: Mapped[Optional["School"]] = relationship("School", back_populates="coaches")
+    branch: Mapped[Optional["Branch"]] = relationship("Branch", back_populates="coaches")
+    athletes: Mapped[list["AthleteProfile"]] = relationship("AthleteProfile", back_populates="coach")
 
 
 class AthleteProfile(Base):
     __tablename__ = "athlete_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("user.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-    school_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("schools.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    branch_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("branches.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    coach_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("coach_profiles.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
-    # ИЗОБРАЖЕНИЯ
-    photo_url: Mapped[str] = mapped_column(
-        String(500), nullable=True
-    )  # Аватар спортсмена
-    cover_url: Mapped[str] = mapped_column(
-        String(500), nullable=True
-    )  # Обложка (берется от школы если не указана)
-
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    school_id: Mapped[int] = mapped_column(Integer, ForeignKey("schools.id", ondelete="SET NULL"), nullable=True, index=True)
+    branch_id: Mapped[int] = mapped_column(Integer, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True)
+    coach_id: Mapped[int] = mapped_column(Integer, ForeignKey("coach_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
+    photo_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
     birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     gender: Mapped[str] = mapped_column(String(10), nullable=True, index=True)
     rank: Mapped[str] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    # Связи
     user: Mapped["User"] = relationship("User", back_populates="athlete_profile")
-    school: Mapped[Optional["School"]] = relationship(
-        "School", back_populates="athletes"
-    )
-    branch: Mapped[Optional["Branch"]] = relationship(
-        "Branch", back_populates="athletes"
-    )
-    coach: Mapped[Optional["CoachProfile"]] = relationship(
-        "CoachProfile", back_populates="athletes"
-    )
-    personal_bests: Mapped[list["PersonalBest"]] = relationship(
-        "PersonalBest", back_populates="athlete", cascade="all, delete-orphan"
-    )
-    entries: Mapped[list["Entry"]] = relationship(
-        "Entry", back_populates="athlete", cascade="all, delete-orphan"
-    )
+    school: Mapped[Optional["School"]] = relationship("School", back_populates="athletes")
+    branch: Mapped[Optional["Branch"]] = relationship("Branch", back_populates="athletes")
+    coach: Mapped[Optional["CoachProfile"]] = relationship("CoachProfile", back_populates="athletes")
+    personal_bests: Mapped[list["PersonalBest"]] = relationship("PersonalBest", back_populates="athlete", cascade="all, delete-orphan")
+    entries: Mapped[list["Entry"]] = relationship("Entry", back_populates="athlete", cascade="all, delete-orphan")
 
 
 class PersonalBest(Base):
     __tablename__ = "personal_bests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    athlete_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("athlete_profiles.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("athlete_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     distance: Mapped[int] = mapped_column(Integer, nullable=False)
     stroke: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     time_seconds: Mapped[float] = mapped_column(Float, nullable=False)
-    set_at: Mapped[datetime] = mapped_column(
-
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
+    set_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     set_date: Mapped[date] = mapped_column(Date, nullable=True)
 
-    athlete: Mapped["AthleteProfile"] = relationship(
-        "AthleteProfile", back_populates="personal_bests"
-    )
+    athlete: Mapped["AthleteProfile"] = relationship("AthleteProfile", back_populates="personal_bests")
+
+
 class Competition(Base):
     __tablename__ = "competitions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str] = mapped_column(String(1000), nullable=True)
-    start_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
-    )
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     venue: Mapped[str] = mapped_column(String(200), nullable=True)
     city: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
     max_participants: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    created_by: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    # Связи (пока закомментируем, добавим позже)
-    age_categories: Mapped[list["AgeCategory"]] = relationship(
-        "AgeCategory", back_populates="competition", cascade="all, delete-orphan"
-    )
-    swim_events: Mapped[list["SwimEvent"]] = relationship(
-        "SwimEvent", back_populates="competition", cascade="all, delete-orphan"
-    )
-    entries: Mapped[list["Entry"]] = relationship(
-        "Entry", back_populates="competition", cascade="all, delete-orphan"
-    )
+    age_categories: Mapped[list["AgeCategory"]] = relationship("AgeCategory", back_populates="competition", cascade="all, delete-orphan")
+    swim_events: Mapped[list["SwimEvent"]] = relationship("SwimEvent", back_populates="competition", cascade="all, delete-orphan")
+    entries: Mapped[list["Entry"]] = relationship("Entry", back_populates="competition", cascade="all, delete-orphan")
     creator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by])
 
 
@@ -1332,171 +1153,79 @@ class AgeCategory(Base):
     __tablename__ = "age_categories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    competition_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("competitions.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    name: Mapped[str] = mapped_column(
-        String(100), nullable=False
-    )  # "10-12 лет", "13-15 лет"
+    competition_id: Mapped[int] = mapped_column(Integer, ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
     min_age: Mapped[int] = mapped_column(Integer, nullable=False)
     max_age: Mapped[int] = mapped_column(Integer, nullable=False)
-    gender: Mapped[str] = mapped_column(
-        String(10), nullable=True
-    )  # male, female, mixed
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    gender: Mapped[str] = mapped_column(String(10), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # Связь с соревнованием
-    competition: Mapped["Competition"] = relationship(
-        "Competition", back_populates="age_categories"
-    )
+    competition: Mapped["Competition"] = relationship("Competition", back_populates="age_categories")
 
 
 class SwimEvent(Base):
     __tablename__ = "swim_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    competition_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("competitions.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)  # "50m Freestyle"
-    distance: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )  # 50, 100, 200, 400, 800, 1500
-    stroke: Mapped[str] = mapped_column(
-        String(30), nullable=False
-    )  # freestyle, breaststroke, backstroke, butterfly, medley
-    gender: Mapped[str] = mapped_column(
-        String(10), nullable=True
-    )  # male, female, mixed
+    competition_id: Mapped[int] = mapped_column(Integer, ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    distance: Mapped[int] = mapped_column(Integer, nullable=False)
+    stroke: Mapped[str] = mapped_column(String(30), nullable=False)
+    gender: Mapped[str] = mapped_column(String(10), nullable=True)
     is_relay: Mapped[bool] = mapped_column(Boolean, default=False)
-    order: Mapped[int] = mapped_column(Integer, default=0)  # порядок проведения
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # Связи
-    competition: Mapped["Competition"] = relationship(
-        "Competition", back_populates="swim_events"
-    )
-    entries: Mapped[list["Entry"]] = relationship(
-        "Entry", back_populates="swim_event", cascade="all, delete-orphan"
-    )
-    heats: Mapped[list["Heat"]] = relationship(
-        "Heat", back_populates="swim_event", cascade="all, delete-orphan"
-    )
+    competition: Mapped["Competition"] = relationship("Competition", back_populates="swim_events")
+    entries: Mapped[list["Entry"]] = relationship("Entry", back_populates="swim_event", cascade="all, delete-orphan")
+    heats: Mapped[list["Heat"]] = relationship("Heat", back_populates="swim_event", cascade="all, delete-orphan")
 
 
 class Entry(Base):
     __tablename__ = "entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    competition_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("competitions.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    swim_event_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("swim_events.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    athlete_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("athlete_profiles.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    competition_id: Mapped[int] = mapped_column(Integer, ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False, index=True)
+    swim_event_id: Mapped[int] = mapped_column(Integer, ForeignKey("swim_events.id", ondelete="CASCADE"), nullable=False, index=True)
+    athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("athlete_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    entry_time: Mapped[float] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending"
-    )  # pending, confirmed, rejected, scratched
-    entry_time: Mapped[float] = mapped_column(
-        Float, nullable=True
-    )  # заявленное время (сек)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    # Связи
-    competition: Mapped["Competition"] = relationship(
-        "Competition", back_populates="entries"
-    )
-    swim_event: Mapped["SwimEvent"] = relationship(
-        "SwimEvent", back_populates="entries"
-    )
-    set_date: Mapped[date] = mapped_column(Date, nullable=True)
-
-    athlete: Mapped["AthleteProfile"] = relationship(
-        "AthleteProfile", back_populates="entries"
-    )
-    heat_entry: Mapped[Optional["HeatEntry"]] = relationship(
-        "HeatEntry", back_populates="entry", uselist=False
-    )
+    competition: Mapped["Competition"] = relationship("Competition", back_populates="entries")
+    swim_event: Mapped["SwimEvent"] = relationship("SwimEvent", back_populates="entries")
+    athlete: Mapped["AthleteProfile"] = relationship("AthleteProfile", back_populates="entries")
+    heat_entry: Mapped[Optional["HeatEntry"]] = relationship("HeatEntry", back_populates="entry", uselist=False)
 
 
 class Heat(Base):
     __tablename__ = "heats"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    swim_event_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("swim_events.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    swim_event_id: Mapped[int] = mapped_column(Integer, ForeignKey("swim_events.id", ondelete="CASCADE"), nullable=False, index=True)
     heat_number: Mapped[int] = mapped_column(Integer, nullable=False)
     lane_count: Mapped[int] = mapped_column(Integer, default=8)
     status: Mapped[str] = mapped_column(String(20), default="scheduled")
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # Связи
     swim_event: Mapped["SwimEvent"] = relationship("SwimEvent", back_populates="heats")
-    entries: Mapped[list["HeatEntry"]] = relationship(
-        "HeatEntry", back_populates="heat", cascade="all, delete-orphan"
-    )
+    entries: Mapped[list["HeatEntry"]] = relationship("HeatEntry", back_populates="heat", cascade="all, delete-orphan")
 
 
 class HeatEntry(Base):
     __tablename__ = "heat_entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    heat_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("heats.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    entry_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("entries.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
+    heat_id: Mapped[int] = mapped_column(Integer, ForeignKey("heats.id", ondelete="CASCADE"), nullable=False, index=True)
+    entry_id: Mapped[int] = mapped_column(Integer, ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     lane: Mapped[int] = mapped_column(Integer, nullable=False)
     result_time: Mapped[float] = mapped_column(Float, nullable=True)
     place: Mapped[int] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    # Связи
     heat: Mapped["Heat"] = relationship("Heat", back_populates="entries")
     entry: Mapped["Entry"] = relationship("Entry", back_populates="heat_entry")
 
@@ -1505,16 +1234,10 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    room: Mapped[str] = mapped_column(
-        String(100), nullable=False, index=True
-    )  # competition_1 или support
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    room: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     message: Mapped[str] = mapped_column(String(1000), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", backref="chat_messages")
 
@@ -1525,23 +1248,12 @@ class News(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     content: Mapped[str] = mapped_column(String(5000), nullable=False)
-    author_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
+    author_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
-    published_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    # Связи
     author: Mapped[Optional["User"]] = relationship("User", backref="news")
 
 
@@ -1552,27 +1264,14 @@ class Article(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     content: Mapped[str] = mapped_column(String(10000), nullable=False)
     summary: Mapped[str] = mapped_column(String(500), nullable=True)
-    category: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True
-    )  # technique, nutrition, rules, etc.
-    author_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
-    )
+    category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    author_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
     views: Mapped[int] = mapped_column(Integer, default=0)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)
-    published_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    # Связи
     author: Mapped[Optional["User"]] = relationship("User", backref="articles")
 
 
@@ -1580,55 +1279,25 @@ class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    token: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False, index=True
-    )
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    token: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", backref="password_reset_tokens")
+
 
 class CompetitionSubscription(Base):
     __tablename__ = "competition_subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    competition_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    competition_id: Mapped[int] = mapped_column(Integer, ForeignKey("competitions.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
     user: Mapped["User"] = relationship("User", backref="subscriptions")
     competition: Mapped["Competition"] = relationship("Competition", backref="subscribers")
-```
-
----
-
-### `app/models_new.py`
-
-```python
-# ДОБАВЬТЕ ЭТИ ПОЛЯ В СУЩЕСТВУЮЩИЕ МОДЕЛИ:
-
-# В класс School добавьте:
-# founder: Mapped[str] = mapped_column(String(200), nullable=True)
-# founded_year: Mapped[int] = mapped_column(Integer, nullable=True)
-
-# В класс CoachProfile добавьте:
-# cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
-
-# В класс AthleteProfile добавьте:
-# cover_url: Mapped[str] = mapped_column(String(500), nullable=True)
 ```
 
 ---
@@ -1676,6 +1345,8 @@ class AgeCategoryRepository(BaseRepository[AgeCategory]):
 ### `app/repositories/article_repository.py`
 
 ```python
+from sqlalchemy import func
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import Optional, List
@@ -2969,17 +2640,6 @@ async def update_my_profile(
 
 ---
 
-### `app/routers/athletes_fix.py`
-
-```python
-# Временно заменим зависимость
-# В файле app/routers/athletes.py найдите строки с @router.get("/my/personal-bests")
-# и замените current_user: User = Depends(get_current_active_user)
-# на current_user: User = Depends(get_current_user_optional_cookie)
-```
-
----
-
 ### `app/routers/auth.py`
 
 ```python
@@ -3308,12 +2968,15 @@ async def get_branch_coaches(
 ### `app/routers/chat.py`
 
 ```python
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlalchemy import text
 import json
 from datetime import datetime, timezone
-from app.database import async_session_maker
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
 from app.core.logging_config import logger
+from app.auth import get_current_user_from_websocket
 
 router = APIRouter(tags=["chat"])
 
@@ -3364,24 +3027,25 @@ manager = ConnectionManager()
 async def websocket_chat(
     websocket: WebSocket,
     room: str,
+    db: AsyncSession = Depends(get_db)
 ):
-    # Для разработки - создаем тестового пользователя если нет токена
-    # В production нужно использовать реальную аутентификацию
     await websocket.accept()
     
-    # Временно используем тестового пользователя для отладки
-    test_user_id = 1
-    test_username = "TestUser"
+    # Аутентификация
+    user = await get_current_user_from_websocket(websocket, db)
+    if not user:
+        await websocket.close(code=1008, reason="Unauthorized")
+        return
     
-    logger.info(f"WebSocket connected with test user: {test_username} to room {room}")
-    await manager.connect(websocket, room, test_user_id, test_username)
+    logger.info(f"WebSocket connected: user {user.username} (ID: {user.id}) to room {room}")
+    await manager.connect(websocket, room, user.id, user.username)
     
     # Загружаем историю сообщений
-    async with async_session_maker() as db:
+    async with db as session:
         try:
-            result = await db.execute(
+            result = await session.execute(
                 text("""
-                    SELECT cm.id, cm.message, cm.created_at, u.username
+                    SELECT cm.message, cm.created_at, u.username
                     FROM chat_messages cm
                     JOIN "user" u ON u.id = cm.user_id
                     WHERE cm.room = :room
@@ -3411,29 +3075,29 @@ async def websocket_chat(
             if not message_text:
                 continue
             
-            logger.info(f"Received message from {test_username}: {message_text[:50]}")
+            logger.info(f"Received message from {user.username}: {message_text[:50]}")
             
             # Сохраняем сообщение
-            async with async_session_maker() as db:
+            async with db as session:
                 try:
                     now = datetime.now(timezone.utc)
-                    await db.execute(
+                    await session.execute(
                         text("""
                             INSERT INTO chat_messages (room, user_id, message, created_at)
                             VALUES (:room, :user_id, :message, :created_at)
                         """),
                         {
                             "room": room,
-                            "user_id": test_user_id,
+                            "user_id": user.id,
                             "message": message_text,
                             "created_at": now
                         }
                     )
-                    await db.commit()
+                    await session.commit()
                     
                     broadcast_message = {
                         "type": "message",
-                        "user": test_username,
+                        "user": user.username,
                         "message": message_text,
                         "created_at": now.isoformat(),
                     }
@@ -3442,10 +3106,10 @@ async def websocket_chat(
                     
                 except Exception as e:
                     logger.error(f"Error saving message: {e}")
-                    await db.rollback()
+                    await session.rollback()
                     
     except WebSocketDisconnect:
-        logger.info(f"User {test_username} disconnected")
+        logger.info(f"User {user.username} disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
@@ -4081,14 +3745,6 @@ async def download_results_protocol(
     )
 
 
-@router.get("/cached-list")
-@cached(expire=60, key_prefix="competitions_list")
-async def get_all_competitions_cached(
-    skip: int = 0,
-    limit: int = 100,
-    service: CompetitionService = Depends(get_competition_service),
-):
-    return await service.get_all_competitions(skip, limit)
 
 
 @router.get("/test-cache")
@@ -4098,98 +3754,199 @@ async def test_cache():
     return {"timestamp": time.time(), "message": "Cached response"}
 
 
-@router.get("/{competition_id}/results.csv")
-async def download_results_csv(
+#@router.get("/{competition_id}/results.csv")
+#async def download_results_csv(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Скачать результаты соревнования в CSV"""
+#    from app.services.csv_service import CSVService
+#    
+#    csv_buffer = await CSVService.export_competition_results(competition_id, db)
+#    return StreamingResponse(
+#        csv_buffer,
+#        media_type="text/csv",
+#        headers={
+#            "Content-Disposition": f"attachment; filename=results_{competition_id}.csv"
+#        },
+#    )
+#
+#@router.post("/{competition_id}/subscribe")
+#async def toggle_subscription(
+#    competition_id: int,
+#    current_user: User = Depends(get_current_user_optional_cookie),
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Подписаться/отписаться от результатов соревнования"""
+#    if not current_user:
+#        raise HTTPException(status_code=401, detail="Not authenticated")
+#    
+#    # Проверяем, существует ли соревнование
+#    competition = await db.execute(
+#        select(Competition).where(Competition.id == competition_id)
+#    )
+#    competition = competition.scalar_one_or_none()
+#    if not competition:
+#        raise HTTPException(status_code=404, detail="Competition not found")
+#    
+#    # Проверяем существующую подписку
+#    from app.models import CompetitionSubscription
+#    result = await db.execute(
+#        select(CompetitionSubscription).where(
+#            CompetitionSubscription.user_id == current_user.id,
+#            CompetitionSubscription.competition_id == competition_id
+#        )
+#    )
+#    subscription = result.scalar_one_or_none()
+#    
+#    if subscription:
+#        # Отписываемся
+#        await db.delete(subscription)
+#        await db.commit()
+#        return {"subscribed": False}
+#    else:
+#        # Подписываемся
+#        new_subscription = CompetitionSubscription(
+#            user_id=current_user.id,
+#            competition_id=competition_id
+#        )
+#        db.add(new_subscription)
+#        await db.commit()
+#        return {"subscribed": True}
+#
+#
+#@router.get("/{competition_id}/subscription-status")
+#async def get_subscription_status(
+#    competition_id: int,
+#    current_user: User = Depends(get_current_user_optional_cookie),
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Проверить статус подписки"""
+#    if not current_user:
+#        return {"subscribed": False}
+#    
+#    from app.models import CompetitionSubscription
+#    result = await db.execute(
+#        select(CompetitionSubscription).where(
+#            CompetitionSubscription.user_id == current_user.id,
+#            CompetitionSubscription.competition_id == competition_id
+#        )
+#    )
+#    subscription = result.scalar_one_or_none()
+#    
+#    return {"subscribed": subscription is not None}
+#
+#@router.post("/{competition_id}/send-notifications")
+#async def send_competition_notifications(
+#    competition_id: int,
+#    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Отправить уведомления подписчикам (ADMIN/SECRETARY)"""
+#    service = CompetitionService(db)
+#    await service.send_results_notifications(competition_id)
+#    return {"message": "Notifications sent successfully"}
+#
+#@router.get("/{competition_id}/rules.pdf")
+#async def download_competition_rules(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Скачать положение о соревновании в PDF"""
+#    pdf_buffer = await PDFService.generate_competition_rules(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"attachment; filename=rules_{competition_id}.pdf"
+#        },
+#    )
+#
+#@router.get("/{competition_id}/start-list/view")
+#async def view_start_list(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Просмотр стартового протокола в браузере"""
+#    pdf_buffer = await PDFService.generate_start_list(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"inline; filename=start_list_{competition_id}.pdf"
+#        },
+#    )
+#
+#@router.get("/{competition_id}/results/view")
+#async def view_results_protocol(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Просмотр итогового протокола в браузере"""
+#    pdf_buffer = await PDFService.generate_results_protocol(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"inline; filename=results_{competition_id}.pdf"
+#        },
+#    )
+#
+#@router.get("/{competition_id}/rules/view")
+#async def view_competition_rules(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Просмотр положения о соревновании в браузере"""
+#    pdf_buffer = await PDFService.generate_competition_rules(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"inline; filename=rules_{competition_id}.pdf"
+#        },
+#    )
+
+# ===== ЭНДПОИНТЫ ДЛЯ ПРОСМОТРА В БРАУЗЕРЕ =====
+
+@router.get("/{competition_id}/start-list/view")
+async def view_start_list(
     competition_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Скачать результаты соревнования в CSV"""
-    from app.services.csv_service import CSVService
-    
-    csv_buffer = await CSVService.export_competition_results(competition_id, db)
+    """Просмотр стартового протокола в браузере"""
+    pdf_buffer = await PDFService.generate_start_list(competition_id, db)
     return StreamingResponse(
-        csv_buffer,
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=results_{competition_id}.csv"
-        },
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=start_list_{competition_id}.pdf"},
     )
 
-@router.post("/{competition_id}/subscribe")
-async def toggle_subscription(
+@router.get("/{competition_id}/results/view")
+async def view_results_protocol(
     competition_id: int,
-    current_user: User = Depends(get_current_user_optional_cookie),
     db: AsyncSession = Depends(get_db),
 ):
-    """Подписаться/отписаться от результатов соревнования"""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Проверяем, существует ли соревнование
-    competition = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
+    """Просмотр итогового протокола в браузере"""
+    pdf_buffer = await PDFService.generate_results_protocol(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=results_{competition_id}.pdf"},
     )
-    competition = competition.scalar_one_or_none()
-    if not competition:
-        raise HTTPException(status_code=404, detail="Competition not found")
-    
-    # Проверяем существующую подписку
-    from app.models import CompetitionSubscription
-    result = await db.execute(
-        select(CompetitionSubscription).where(
-            CompetitionSubscription.user_id == current_user.id,
-            CompetitionSubscription.competition_id == competition_id
-        )
-    )
-    subscription = result.scalar_one_or_none()
-    
-    if subscription:
-        # Отписываемся
-        await db.delete(subscription)
-        await db.commit()
-        return {"subscribed": False}
-    else:
-        # Подписываемся
-        new_subscription = CompetitionSubscription(
-            user_id=current_user.id,
-            competition_id=competition_id
-        )
-        db.add(new_subscription)
-        await db.commit()
-        return {"subscribed": True}
 
-
-@router.get("/{competition_id}/subscription-status")
-async def get_subscription_status(
+@router.get("/{competition_id}/rules/view")
+async def view_competition_rules(
     competition_id: int,
-    current_user: User = Depends(get_current_user_optional_cookie),
     db: AsyncSession = Depends(get_db),
 ):
-    """Проверить статус подписки"""
-    if not current_user:
-        return {"subscribed": False}
-    
-    from app.models import CompetitionSubscription
-    result = await db.execute(
-        select(CompetitionSubscription).where(
-            CompetitionSubscription.user_id == current_user.id,
-            CompetitionSubscription.competition_id == competition_id
-        )
+    """Просмотр положения о соревновании в браузере"""
+    pdf_buffer = await PDFService.generate_competition_rules(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=rules_{competition_id}.pdf"},
     )
-    subscription = result.scalar_one_or_none()
-    
-    return {"subscribed": subscription is not None}
-
-@router.post("/{competition_id}/send-notifications")
-async def send_competition_notifications(
-    competition_id: int,
-    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
-    db: AsyncSession = Depends(get_db),
-):
-    """Отправить уведомления подписчикам (ADMIN/SECRETARY)"""
-    service = CompetitionService(db)
-    await service.send_results_notifications(competition_id)
-    return {"message": "Notifications sent successfully"}
 ```
 
 ---
@@ -5235,141 +4992,83 @@ from app.repositories.password_reset_repository import PasswordResetRepository
 
 
 class AuthService:
-    """Сервис для аутентификации (бизнес-логика)"""
-
     def __init__(self, session: AsyncSession):
         self.user_repo = UserRepository(session)
         self.refresh_token_repo = RefreshTokenRepository(session)
         self.session = session
 
-    async def register_user(
-        self,
-        email: str,
-        username: str,
-        password: str,
-        full_name: str,
-        role: UserRole,
-    ):
-        """Зарегистрировать нового пользователя"""
+    async def register_user(self, email: str, username: str, password: str, full_name: str, role: UserRole):
         if await self.user_repo.get_by_email(email):
             raise UserAlreadyExistsError("email", email)
-
         if await self.user_repo.get_by_username(username):
             raise UserAlreadyExistsError("username", username)
-
         hashed_password = get_password_hash(password)
-        user = await self.user_repo.create(
-            email=email,
-            username=username,
-            hashed_password=hashed_password,
-            full_name=full_name,
-            role=role,
+        return await self.user_repo.create(
+            email=email, username=username, hashed_password=hashed_password,
+            full_name=full_name, role=role
         )
-        return user
 
     async def login_user(self, username: str, password: str) -> tuple[str, str]:
-        """Возвращает (access_token, refresh_token)"""
         user = await self.user_repo.get_by_username(username)
-        if not user:
+        if not user or not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError()
-
-        if not verify_password(password, user.hashed_password):
-            raise InvalidCredentialsError()
-
-        # Создаём access token
-        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            data={"sub": str(user.id)},
-            expires_delta=access_token_expires,
-        )
-
-        # Создаём refresh token
+        access_token = create_access_token(data={"sub": str(user.id)})
         refresh_token_obj = await self.refresh_token_repo.create_token(user.id)
-
         return access_token, refresh_token_obj.token
 
     async def refresh_access_token(self, refresh_token_value: str) -> str:
-        """Обновить access token по refresh token"""
         refresh_token = await self.refresh_token_repo.get_by_token(refresh_token_value)
         if not refresh_token:
             raise InvalidRefreshTokenError("Invalid refresh token")
-
-        now = datetime.now(timezone.utc)
-        if refresh_token.expires_at < now:
+        if refresh_token.expires_at < datetime.now(timezone.utc):
             await self.refresh_token_repo.revoke_token(refresh_token.id)
             raise ExpiredRefreshTokenError("Refresh token expired")
-
-        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            data={"sub": str(refresh_token.user_id)},
-            expires_delta=access_token_expires,
-        )
-        return access_token
+        return create_access_token(data={"sub": str(refresh_token.user_id)})
 
     async def logout(self, refresh_token_value: str) -> None:
-        """Отозвать refresh token"""
         refresh_token = await self.refresh_token_repo.get_by_token(refresh_token_value)
         if refresh_token:
             await self.refresh_token_repo.revoke_token(refresh_token.id)
 
     async def logout_all_devices(self, user_id: int) -> None:
-        """Отозвать все refresh токены пользователя"""
         await self.refresh_token_repo.revoke_all_user_tokens(user_id)
 
     async def request_password_reset(self, email: str) -> str:
-        """Создаёт токен для сброса пароля. Возвращает токен."""
         user = await self.user_repo.get_by_email(email)
         if not user:
             return "reset_token_placeholder"
-        
-        self.password_reset_repo = PasswordResetRepository(self.session)
-        token = await self.password_reset_repo.create_token(user.id)
+        repo = PasswordResetRepository(self.session)
+        token = await repo.create_token(user.id)
         return token.token
 
     async def reset_password(self, token: str, new_password: str) -> bool:
-        """Сброс пароля по токену."""
-        self.password_reset_repo = PasswordResetRepository(self.session)
-        
-        reset_token = await self.password_reset_repo.get_valid_token(token)
+        repo = PasswordResetRepository(self.session)
+        reset_token = await repo.get_valid_token(token)
         if not reset_token:
             return False
-        
         user = await self.user_repo.get_by_id(reset_token.user_id)
         if not user:
             return False
-        
-        hashed_password = get_password_hash(new_password)
-        await self.user_repo.update(user.id, hashed_password=hashed_password)
-        await self.password_reset_repo.mark_as_used(reset_token.id)
-        
-        # Отзываем все refresh токены пользователя
+        await self.user_repo.update(user.id, hashed_password=get_password_hash(new_password))
+        await repo.mark_as_used(reset_token.id)
         await self.refresh_token_repo.revoke_all_user_tokens(user.id)
-        
         return True
 
     async def change_password(self, user_id: int, old_password: str, new_password: str) -> bool:
-        """Смена пароля авторизованным пользователем."""
         user = await self.user_repo.get_by_id(user_id)
         if not user or not verify_password(old_password, user.hashed_password):
             return False
-        
-        hashed_password = get_password_hash(new_password)
-        await self.user_repo.update(user_id, hashed_password=hashed_password)
-        
-        # Отзываем все refresh токены
+        await self.user_repo.update(user_id, hashed_password=get_password_hash(new_password))
         await self.refresh_token_repo.revoke_all_user_tokens(user_id)
-        
         return True
 
     async def send_welcome_email(self, user_id: int) -> None:
-        """Отправить приветственное письмо"""
         user = await self.user_repo.get_by_id(user_id)
         if user and user.email:
             from app.core.email import send_welcome_email
             await send_welcome_email(user.email, user.username)
 
     async def send_password_reset_email(self, email: str, token: str) -> None:
-        """Отправить письмо со ссылкой для сброса пароля"""
         from app.core.email import send_password_reset_email
         await send_password_reset_email(email, token)
 ```
@@ -5425,6 +5124,8 @@ class ChatService:
 ### `app/services/coach_service.py`
 
 ```python
+from sqlalchemy.orm import selectinload
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from datetime import datetime
@@ -5506,6 +5207,10 @@ class CoachService:
 ### `app/services/competition_service.py`
 
 ```python
+from sqlalchemy import select
+from datetime import datetime, timezone
+from app.core.logging_config import logger
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from app.repositories.competition_repository import CompetitionRepository
@@ -6258,93 +5963,22 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from io import BytesIO
 from datetime import datetime
-from app.models import Competition, Heat, HeatEntry
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Competition, Heat, HeatEntry, SwimEvent, Entry, AthleteProfile, User
 
 
 class PDFService:
+    
     @staticmethod
-    async def generate_start_list(competition_id: int, session) -> BytesIO:
+    async def generate_start_list(competition_id: int, session: AsyncSession) -> BytesIO:
         """Генерация предстартового протокола"""
-        # Получаем данные
+        # Получаем все заплывы через SwimEvent
         result = await session.execute(
             select(Heat)
-            .where(Heat.competition_id == competition_id)
-            .order_by(Heat.heat_number)
-        )
-        heats = result.scalars().all()
-
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(
-            buffer, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm
-        )
-        styles = getSampleStyleSheet()
-        elements = []
-
-        # Заголовок
-        title_style = ParagraphStyle(
-            "CustomTitle",
-            parent=styles["Heading1"],
-            fontSize=16,
-            alignment=1,  # Center
-            spaceAfter=30,
-        )
-        elements.append(Paragraph("Предстартовый протокол", title_style))
-        elements.append(Spacer(1, 20))
-
-        # Данные для каждого заплыва
-        for heat in heats:
-            heat_style = ParagraphStyle(
-                "HeatTitle", parent=styles["Heading2"], fontSize=12, spaceAfter=10
-            )
-            elements.append(Paragraph(f"Заплыв №{heat.heat_number}", heat_style))
-
-            # Получаем участников
-            entries_result = await session.execute(
-                select(HeatEntry)
-                .where(HeatEntry.heat_id == heat.id)
-                .order_by(HeatEntry.lane)
-            )
-            entries = entries_result.scalars().all()
-
-            # Таблица
-            data = [["Дорожка", "Спортсмен", "Время"]]
-            for entry in entries:
-                athlete_name = (
-                    entry.entry.athlete.user.full_name if entry.entry.athlete else "N/A"
-                )
-                data.append(
-                    [str(entry.lane), athlete_name, entry.entry.entry_time or "-"]
-                )
-
-            table = Table(data, colWidths=[3 * cm, 8 * cm, 4 * cm])
-            table.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                        ("FONTSIZE", (0, 0), (-1, 0), 10),
-                        ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-                        ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
-                        ("GRID", (0, 0), (-1, -1), 1, colors.black),
-                    ]
-                )
-            )
-            elements.append(table)
-            elements.append(Spacer(1, 20))
-
-        doc.build(elements)
-        buffer.seek(0)
-        return buffer
-
-    @staticmethod
-    async def generate_results_protocol(competition_id: int, session) -> BytesIO:
-        """Генерация итогового протокола"""
-        # Получаем завершённые заплывы
-        result = await session.execute(
-            select(Heat)
-            .where(Heat.competition_id == competition_id, Heat.status == "completed")
+            .join(SwimEvent, Heat.swim_event_id == SwimEvent.id)
+            .where(SwimEvent.competition_id == competition_id)
             .order_by(Heat.heat_number)
         )
         heats = result.scalars().all()
@@ -6364,56 +5998,175 @@ class PDFService:
             alignment=1,
             spaceAfter=30,
         )
+        elements.append(Paragraph("Предстартовый протокол", title_style))
+        elements.append(Spacer(1, 20))
+
+        for heat in heats:
+            # Получаем информацию о дистанции
+            event_result = await session.execute(
+                select(SwimEvent).where(SwimEvent.id == heat.swim_event_id)
+            )
+            event = event_result.scalar_one()
+            
+            heat_style = ParagraphStyle(
+                "HeatTitle", parent=styles["Heading2"], fontSize=12, spaceAfter=10
+            )
+            elements.append(Paragraph(f"Заплыв №{heat.heat_number} - {event.distance}м {event.stroke}", heat_style))
+            
+            # Получаем участников заплыва
+            entries_result = await session.execute(
+                select(HeatEntry, Entry, AthleteProfile, User)
+                .join(Entry, HeatEntry.entry_id == Entry.id)
+                .join(AthleteProfile, Entry.athlete_id == AthleteProfile.id)
+                .join(User, AthleteProfile.user_id == User.id)
+                .where(HeatEntry.heat_id == heat.id)
+                .order_by(HeatEntry.lane)
+            )
+            heat_entries = entries_result.all()
+            
+            if heat_entries:
+                data = [["Дорожка", "Спортсмен", "Результат"]]
+                for he, entry, athlete, user in heat_entries:
+                    data.append([
+                        str(he.lane),
+                        user.full_name,
+                        str(entry.entry_time) if entry.entry_time else "-"
+                    ])
+                
+                table = Table(data, colWidths=[3*cm, 8*cm, 4*cm])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ]))
+                elements.append(table)
+            else:
+                elements.append(Paragraph("Нет участников", styles["Normal"]))
+            
+            elements.append(Spacer(1, 20))
+
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    @staticmethod
+    async def generate_results_protocol(competition_id: int, session: AsyncSession) -> BytesIO:
+        """Генерация итогового протокола"""
+        # Получаем все заплывы
+        result = await session.execute(
+            select(Heat)
+            .join(SwimEvent, Heat.swim_event_id == SwimEvent.id)
+            .where(SwimEvent.competition_id == competition_id)
+            .order_by(Heat.heat_number)
+        )
+        heats = result.scalars().all()
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
+        styles = getSampleStyleSheet()
+        elements = []
+
+        title_style = ParagraphStyle(
+            "CustomTitle",
+            parent=styles["Heading1"],
+            fontSize=16,
+            alignment=1,
+            spaceAfter=30,
+        )
         elements.append(Paragraph("Итоговый протокол соревнований", title_style))
         elements.append(Spacer(1, 20))
 
         for heat in heats:
+            event_result = await session.execute(
+                select(SwimEvent).where(SwimEvent.id == heat.swim_event_id)
+            )
+            event = event_result.scalar_one()
+            
             heat_style = ParagraphStyle(
                 "HeatTitle", parent=styles["Heading2"], fontSize=12, spaceAfter=10
             )
-            elements.append(
-                Paragraph(f"Заплыв №{heat.heat_number} (результаты)", heat_style)
-            )
-
+            elements.append(Paragraph(f"Заплыв №{heat.heat_number} - {event.distance}м {event.stroke} (результаты)", heat_style))
+            
+            # Получаем участников с результатами
             entries_result = await session.execute(
-                select(HeatEntry)
+                select(HeatEntry, Entry, AthleteProfile, User)
+                .join(Entry, HeatEntry.entry_id == Entry.id)
+                .join(AthleteProfile, Entry.athlete_id == AthleteProfile.id)
+                .join(User, AthleteProfile.user_id == User.id)
                 .where(HeatEntry.heat_id == heat.id)
                 .order_by(HeatEntry.place)
             )
-            entries = entries_result.scalars().all()
-
-            data = [["Место", "Дорожка", "Спортсмен", "Результат"]]
-            for entry in entries:
-                athlete_name = (
-                    entry.entry.athlete.user.full_name if entry.entry.athlete else "N/A"
-                )
-                result_time = f"{entry.result_time:.2f}" if entry.result_time else "-"
-                data.append(
-                    [
-                        str(entry.place or "-"),
-                        str(entry.lane),
-                        athlete_name,
-                        result_time,
-                    ]
-                )
-
-            table = Table(data, colWidths=[2 * cm, 2.5 * cm, 8 * cm, 3 * cm])
-            table.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                        ("FONTSIZE", (0, 0), (-1, 0), 10),
-                        ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
-                        ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
-                        ("GRID", (0, 0), (-1, -1), 1, colors.black),
-                    ]
-                )
-            )
-            elements.append(table)
+            heat_entries = entries_result.all()
+            
+            if heat_entries:
+                data = [["Место", "Дорожка", "Спортсмен", "Результат"]]
+                for he, entry, athlete, user in heat_entries:
+                    data.append([
+                        str(he.place) if he.place else "-",
+                        str(he.lane),
+                        user.full_name,
+                        f"{he.result_time:.2f}" if he.result_time else "-"
+                    ])
+                
+                table = Table(data, colWidths=[2*cm, 2.5*cm, 8*cm, 3*cm])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ]))
+                elements.append(table)
+            else:
+                elements.append(Paragraph("Нет результатов", styles["Normal"]))
+            
             elements.append(Spacer(1, 20))
+
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    @staticmethod
+    async def generate_competition_rules(competition_id: int, session: AsyncSession) -> BytesIO:
+        """Генерация положения о соревновании"""
+        result = await session.execute(
+            select(Competition).where(Competition.id == competition_id)
+        )
+        competition = result.scalar_one_or_none()
+
+        if not competition:
+            raise ValueError("Competition not found")
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
+        styles = getSampleStyleSheet()
+        elements = []
+
+        title_style = ParagraphStyle(
+            "CustomTitle",
+            parent=styles["Heading1"],
+            fontSize=16,
+            alignment=1,
+            spaceAfter=30,
+        )
+        elements.append(Paragraph("ПОЛОЖЕНИЕ О СОРЕВНОВАНИИ", title_style))
+        elements.append(Spacer(1, 20))
+
+        elements.append(Paragraph(f"<b>1. Общие положения</b>", styles["Heading2"]))
+        elements.append(Paragraph(f"1.1. {competition.name}", styles["Normal"]))
+        elements.append(Spacer(1, 10))
+        
+        elements.append(Paragraph(f"<b>2. Сроки и место проведения</b>", styles["Heading2"]))
+        elements.append(Paragraph(f"2.1. Дата проведения: {competition.start_date.strftime('%d.%m.%Y')} - {competition.end_date.strftime('%d.%m.%Y')}", styles["Normal"]))
+        elements.append(Paragraph(f"2.2. Место проведения: {competition.venue or 'Не указано'}, {competition.city or 'Не указан'}", styles["Normal"]))
+        elements.append(Spacer(1, 10))
+        
+        elements.append(Paragraph(f"<b>3. Участники</b>", styles["Heading2"]))
+        elements.append(Paragraph(f"3.1. Максимальное количество участников: {competition.max_participants or 'Не ограничено'}", styles["Normal"]))
 
         doc.build(elements)
         buffer.seek(0)
@@ -7459,16 +7212,39 @@ loadBranchCoaches();
                 <p><strong>📍 Место:</strong> {{ competition.venue or 'Не указано' }}, {{ competition.city or 'Не указан' }}</p>
                 <p><strong>📊 Статус:</strong> <span class="badge bg-secondary">{{ competition.status }}</span></p>
                 
-                <div class="mt-3">
-                    <a href="/competitions/{{ competition.id }}/start-list.pdf" class="btn btn-info">
-                        <i class="fas fa-file-pdf"></i> Предстартовый протокол
-                    </a>
-                    <a href="/competitions/{{ competition.id }}/results.pdf" class="btn btn-success">
-                        <i class="fas fa-file-pdf"></i> Итоговый протокол
-                    </a>
-                    <a href="/competitions/{{ competition.id }}/results.csv" class="btn btn-info">
-                        <i class="fas fa-file-csv"></i> CSV результаты
-                    </a>
+                <div class="mt-4">
+                    <h5>📄 Документы:</h5>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <!-- Стартовый протокол -->
+                        <div class="btn-group">
+                            <a href="/competitions/{{ competition.id }}/start-list.pdf" class="btn btn-primary" download>
+                                <i class="fas fa-download"></i> Скачать стартовый
+                            </a>
+                            <a href="/competitions/{{ competition.id }}/start-list/view" class="btn btn-outline-primary" target="_blank">
+                                <i class="fas fa-eye"></i> Просмотр
+                            </a>
+                        </div>
+                        
+                        <!-- Итоговый протокол -->
+                        <div class="btn-group">
+                            <a href="/competitions/{{ competition.id }}/results.pdf" class="btn btn-success" download>
+                                <i class="fas fa-download"></i> Скачать итоговый
+                            </a>
+                            <a href="/competitions/{{ competition.id }}/results/view" class="btn btn-outline-success" target="_blank">
+                                <i class="fas fa-eye"></i> Просмотр
+                            </a>
+                        </div>
+                        
+                        <!-- Положение о соревновании -->
+                        <div class="btn-group">
+                            <a href="/competitions/{{ competition.id }}/rules.pdf" class="btn btn-warning" download>
+                                <i class="fas fa-download"></i> Скачать положение
+                            </a>
+                            <a href="/competitions/{{ competition.id }}/rules/view" class="btn btn-outline-warning" target="_blank">
+                                <i class="fas fa-eye"></i> Просмотр
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -7489,33 +7265,7 @@ loadBranchCoaches();
 </div>
 
 <script>
-let currentSubscriptionStatus = false;
-
-// Проверка статуса подписки
-function checkSubscriptionStatus(competitionId) {
-    fetch(`/competitions/${competitionId}/subscription-status`, {
-        credentials: 'include'
-    })
-    .then(res => res.json())
-    .then(data => {
-        currentSubscriptionStatus = data.subscribed;
-        const btn = document.getElementById('subscribeBtn');
-        if (data.subscribed) {
-            btn.innerHTML = '<i class="fas fa-bell"></i> ✓ Вы подписаны';
-            btn.classList.remove('btn-outline-primary');
-            btn.classList.add('btn-success');
-        } else {
-            btn.innerHTML = '<i class="fas fa-bell"></i> Подписаться на результаты';
-            btn.classList.remove('btn-success');
-            btn.classList.add('btn-outline-primary');
-        }
-    })
-    .catch(() => {});
-}
-
-// Переключение подписки
 function toggleSubscription(competitionId) {
-    // Сначала проверяем авторизацию
     fetch('/auth/me', { credentials: 'include' })
         .then(response => {
             if (!response.ok) {
@@ -7523,7 +7273,6 @@ function toggleSubscription(competitionId) {
                 window.location.href = '/login';
                 return;
             }
-            // Авторизованы - переключаем подписку
             fetch(`/competitions/${competitionId}/subscribe`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -7539,40 +7288,29 @@ function toggleSubscription(competitionId) {
                     btn.classList.add('btn-success');
                     msgDiv.innerHTML = '✓ Вы подписались на результаты';
                     msgDiv.style.color = 'green';
-                    currentSubscriptionStatus = true;
                 } else {
                     btn.innerHTML = '<i class="fas fa-bell"></i> Подписаться на результаты';
                     btn.classList.remove('btn-success');
                     btn.classList.add('btn-outline-primary');
                     msgDiv.innerHTML = 'Вы отписались от результатов';
                     msgDiv.style.color = 'red';
-                    currentSubscriptionStatus = false;
                 }
                 setTimeout(() => { msgDiv.innerHTML = ''; }, 3000);
-            })
-            .catch(() => {
-                alert('Ошибка при подписке');
             });
-        })
-        .catch(() => {
-            sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
-            window.location.href = '/login';
         });
 }
 
-// Загрузка страницы
-document.addEventListener('DOMContentLoaded', function() {
-    const competitionId = {{ competition.id }};
-    
-    // Проверяем, вернулись ли с логина
-    const redirectUrl = sessionStorage.getItem('redirectAfterLogin');
-    if (redirectUrl && window.location.pathname === redirectUrl) {
-        sessionStorage.removeItem('redirectAfterLogin');
-    }
-    
-    // Проверяем статус подписки
-    checkSubscriptionStatus(competitionId);
-});
+// Проверяем статус подписки
+fetch(`/competitions/{{ competition.id }}/subscription-status`, { credentials: 'include' })
+    .then(res => res.json())
+    .then(data => {
+        const btn = document.getElementById('subscribeBtn');
+        if (data.subscribed) {
+            btn.innerHTML = '<i class="fas fa-bell"></i> ✓ Вы подписаны';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-success');
+        }
+    });
 </script>
 {% endblock %}
 ```
@@ -8287,7 +8025,11 @@ function chatComponent(room) {
         <p><strong>Дата:</strong> {{ comp.start_date.strftime('%d.%m.%Y') }} - {{ comp.end_date.strftime('%d.%m.%Y') }}</p>
         <span class="badge bg-secondary">{{ comp.status }}</span>
         <a href="/competitions/{{ comp.id }}/page" class="btn btn-sm btn-primary float-end ms-2">Подробнее</a>
+        
+        <!-- Кнопка удаления только для админа -->
+        {% if current_user and current_user.role == 'ADMIN' %}
         <button class="btn btn-sm btn-danger float-end" onclick="deleteCompetition({{ comp.id }})">Удалить</button>
+        {% endif %}
     </div>
 </div>
 {% else %}
@@ -8306,6 +8048,11 @@ function deleteCompetition(compId) {
             location.reload();
         });
     }
+}
+
+function getToken() {
+    const match = document.cookie.match(/access_token=([^;]+)/);
+    return match ? match[1] : null;
 }
 </script>
 ```
@@ -8353,7 +8100,11 @@ function deleteCompetition(compId) {
         <p class="card-text">{{ news.content[:200] }}...</p>
         <small class="text-muted">{{ news.published_at.strftime('%d.%m.%Y') if news.published_at else 'Черновик' }}</small>
         <a href="/news/{{ news.id }}" class="btn btn-sm btn-primary float-end ms-2">Читать</a>
+        
+        <!-- Кнопка удаления только для админа -->
+        {% if current_user and current_user.role == 'ADMIN' %}
         <button class="btn btn-sm btn-danger float-end" onclick="deleteNews({{ news.id }})">Удалить</button>
+        {% endif %}
     </div>
 </div>
 {% else %}
@@ -9083,16 +8834,230 @@ document.addEventListener('DOMContentLoaded', searchSchools);
 
 ---
 
-### `app/templates/test.html`
+### `create_test_data.py`
 
-```html
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-<h1>Jinja2 работает!</h1>
-</body>
-</html>
+```python
+import asyncio
+from datetime import datetime, timedelta, timezone
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
+from app.core.config import settings
+from app.auth import get_password_hash
+
+async def create_test_data():
+    engine = create_async_engine(settings.DATABASE_URL, echo=True)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    
+    async with async_session() as session:
+        # 1. Очищаем существующие данные (опционально)
+        await session.execute(text("TRUNCATE TABLE \"user\", schools, coach_profiles, athlete_profiles, branches CASCADE;"))
+        await session.commit()
+        
+        # 2. Создаём пользователей
+        users_data = [
+            {"email": "admin@swim.ru", "username": "admin", "password": "admin123", "full_name": "Администратор", "role": "admin"},
+            {"email": "coach@swim.ru", "username": "coach", "password": "coach123", "full_name": "Иван Петров", "role": "coach"},
+            {"email": "athlete@swim.ru", "username": "athlete", "password": "athlete123", "full_name": "Анна Сидорова", "role": "athlete"},
+            {"email": "school@swim.ru", "username": "schoolrep", "password": "school123", "full_name": "Мария Иванова", "role": "school_rep"},
+        ]
+        
+        users = {}
+        for u in users_data:
+            result = await session.execute(
+                text("""
+                    INSERT INTO \"user\" (email, username, hashed_password, full_name, role, is_active, created_at)
+                    VALUES (:email, :username, :hashed_password, :full_name, :role, true, :created_at)
+                    RETURNING id
+                """),
+                {
+                    "email": u["email"],
+                    "username": u["username"],
+                    "hashed_password": get_password_hash(u["password"]),
+                    "full_name": u["full_name"],
+                    "role": u["role"],
+                    "created_at": datetime.now(timezone.utc)
+                }
+            )
+            user_id = result.scalar()
+            users[u["username"]] = {"id": user_id, **u}
+            print(f"✅ Создан пользователь: {u['username']} / {u['password']}")
+        
+        # 3. Создаём школу
+        school_result = await session.execute(
+            text("""
+                INSERT INTO schools (name, full_name, city, address, description, founded_year, phone, email, website, is_active, created_at)
+                VALUES (:name, :full_name, :city, :address, :description, :founded_year, :phone, :email, :website, true, :created_at)
+                RETURNING id
+            """),
+            {
+                "name": "СШОР по плаванию",
+                "full_name": "Специализированная школа олимпийского резерва по плаванию",
+                "city": "Москва",
+                "address": "ул. Спортивная, д. 10",
+                "description": "Лучшая школа плавания в Москве, подготовка чемпионов",
+                "founded_year": 1995,
+                "phone": "+7 (495) 123-45-67",
+                "email": "info@swimschool.ru",
+                "website": "https://swimschool.ru",
+                "created_at": datetime.now(timezone.utc)
+            }
+        )
+        school_id = school_result.scalar()
+        print(f"✅ Создана школа: СШОР по плаванию (ID: {school_id})")
+        
+        # 4. Создаём филиал
+        branch_result = await session.execute(
+            text("""
+                INSERT INTO branches (school_id, name, address, phone, email, is_active, created_at)
+                VALUES (:school_id, :name, :address, :phone, :email, true, :created_at)
+                RETURNING id
+            """),
+            {
+                "school_id": school_id,
+                "name": "Филиал на Юго-Западе",
+                "address": "пр-т Вернадского, д. 25",
+                "phone": "+7 (495) 987-65-43",
+                "email": "southwest@swimschool.ru",
+                "created_at": datetime.now(timezone.utc)
+            }
+        )
+        branch_id = branch_result.scalar()
+        print(f"✅ Создан филиал: Филиал на Юго-Западе (ID: {branch_id})")
+        
+        # 5. Создаём профиль тренера
+        coach_result = await session.execute(
+            text("""
+                INSERT INTO coach_profiles (user_id, school_id, branch_id, qualification, experience_years, specialization, is_head_coach, bio, created_at, updated_at)
+                VALUES (:user_id, :school_id, :branch_id, :qualification, :experience_years, :specialization, :is_head_coach, :bio, :created_at, :updated_at)
+                RETURNING id
+            """),
+            {
+                "user_id": users["coach"]["id"],
+                "school_id": school_id,
+                "branch_id": branch_id,
+                "qualification": "Тренер высшей категории",
+                "experience_years": 15,
+                "specialization": "Кроль, баттерфляй",
+                "is_head_coach": True,
+                "bio": "Заслуженный тренер России, подготовил 5 мастеров спорта",
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+        )
+        coach_id = coach_result.scalar()
+        print(f"✅ Создан профиль тренера (ID: {coach_id})")
+        
+        # 6. Создаём профиль спортсмена
+        athlete_result = await session.execute(
+            text("""
+                INSERT INTO athlete_profiles (user_id, school_id, branch_id, coach_id, birth_date, gender, rank, created_at, updated_at)
+                VALUES (:user_id, :school_id, :branch_id, :coach_id, :birth_date, :gender, :rank, :created_at, :updated_at)
+                RETURNING id
+            """),
+            {
+                "user_id": users["athlete"]["id"],
+                "school_id": school_id,
+                "branch_id": branch_id,
+                "coach_id": coach_id,
+                "birth_date": datetime(2005, 6, 15, tzinfo=timezone.utc),
+                "gender": "female",
+                "rank": "КМС",
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+        )
+        athlete_id = athlete_result.scalar()
+        print(f"✅ Создан профиль спортсмена (ID: {athlete_id})")
+        
+        # 7. Добавляем личные рекорды спортсмена
+        pbs = [
+            {"distance": 50, "stroke": "freestyle", "time_seconds": 26.5},
+            {"distance": 100, "stroke": "freestyle", "time_seconds": 58.2},
+            {"distance": 200, "stroke": "freestyle", "time_seconds": 128.5},
+            {"distance": 100, "stroke": "breaststroke", "time_seconds": 75.3},
+        ]
+        
+        for pb in pbs:
+            await session.execute(
+                text("""
+                    INSERT INTO personal_bests (athlete_id, distance, stroke, time_seconds, set_at)
+                    VALUES (:athlete_id, :distance, :stroke, :time_seconds, :set_at)
+                """),
+                {
+                    "athlete_id": athlete_id,
+                    "distance": pb["distance"],
+                    "stroke": pb["stroke"],
+                    "time_seconds": pb["time_seconds"],
+                    "set_at": datetime.now(timezone.utc)
+                }
+            )
+        print(f"✅ Добавлено {len(pbs)} личных рекордов")
+        
+        # 8. Создаём соревнование
+        competition_result = await session.execute(
+            text("""
+                INSERT INTO competitions (name, description, start_date, end_date, venue, city, status, max_participants, created_at, updated_at)
+                VALUES (:name, :description, :start_date, :end_date, :venue, :city, :status, :max_participants, :created_at, :updated_at)
+                RETURNING id
+            """),
+            {
+                "name": "Чемпионат Москвы 2026",
+                "description": "Открытый чемпионат города Москвы по плаванию",
+                "start_date": datetime.now(timezone.utc) + timedelta(days=14),
+                "end_date": datetime.now(timezone.utc) + timedelta(days=16),
+                "venue": "Дворец водного спорта",
+                "city": "Москва",
+                "status": "registration_open",
+                "max_participants": 200,
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+        )
+        competition_id = competition_result.scalar()
+        print(f"✅ Создано соревнование: Чемпионат Москвы 2026 (ID: {competition_id})")
+        
+        # 9. Создаём новость
+        news_result = await session.execute(
+            text("""
+                INSERT INTO news (title, content, author_id, is_published, published_at, created_at, updated_at)
+                VALUES (:title, :content, :author_id, true, :published_at, :created_at, :updated_at)
+                RETURNING id
+            """),
+            {
+                "title": "Открыта регистрация на Чемпионат Москвы",
+                "content": "Уважаемые спортсмены и тренеры! Открыта регистрация на Чемпионат Москвы по плаванию. Регистрация продлится до 1 мая.",
+                "author_id": users["admin"]["id"],
+                "published_at": datetime.now(timezone.utc),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)
+            }
+        )
+        print(f"✅ Создана новость")
+        
+        await session.commit()
+        
+        print("\n" + "="*50)
+        print("✅ ТЕСТОВЫЕ ДАННЫЕ УСПЕШНО ДОБАВЛЕНЫ")
+        print("="*50)
+        print("\n👤 Пользователи для входа:")
+        print("   Администратор: admin@swim.ru / admin123")
+        print("   Тренер: coach@swim.ru / coach123")
+        print("   Спортсмен: athlete@swim.ru / athlete123")
+        print("   Представитель школы: schoolrep@swim.ru / school123")
+        print("\n🏊 Ссылки:")
+        print("   Главная: http://localhost:8000")
+        print("   Школы: http://localhost:8000/schools/page")
+        print("   Соревнования: http://localhost:8000/competitions/page")
+        print("   Новости: http://localhost:8000/news/page")
+        print("   Профиль тренера: http://localhost:8000/coaches/1/page")
+        print("   Профиль спортсмена: http://localhost:8000/athletes/1/page")
+        print("   Live: http://localhost:8000/live")
+    
+    await engine.dispose()
+
+if __name__ == "__main__":
+    asyncio.run(create_test_data())
 ```
 
 ---
@@ -9108,11 +9073,17 @@ services:
       POSTGRES_USER: swimming_user
       POSTGRES_PASSWORD: swimming_pass
       POSTGRES_DB: swimming_portal
-      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "127.0.0.1:5432:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: swimming-redis
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:
@@ -9875,6 +9846,43 @@ API: `POST /auth/register`
 
 ---
 
+### `init_db.py`
+
+```python
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import text
+from app.core.config import settings
+from app.models import Base
+
+async def init_db():
+    engine = create_async_engine(settings.DATABASE_URL, echo=True)
+    
+    async with engine.begin() as conn:
+        # Создаём все таблицы
+        await conn.run_sync(Base.metadata.create_all)
+        print("✅ Все таблицы созданы")
+        
+        # Проверяем созданные таблицы
+        result = await conn.execute(text("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+            ORDER BY table_name
+        """))
+        tables = result.fetchall()
+        print(f"📊 Создано таблиц: {len(tables)}")
+        for table in tables:
+            print(f"   - {table[0]}")
+    
+    await engine.dispose()
+
+if __name__ == "__main__":
+    asyncio.run(init_db())
+```
+
+---
+
 ### `init_production_db.py`
 
 ```python
@@ -9950,6 +9958,7 @@ jinja2==3.1.4
 aiofiles==24.1.0
 openpyxl==3.1.5
 slowapi==0.1.9
+redis==5.0.8
 sentry-sdk==2.19.0
 structlog==25.2.0
 email-validator==2.2.0
@@ -9960,15 +9969,79 @@ pytest-asyncio==0.24.0
 httpx==0.28.1
 factory-boy==3.3.1
 faker==30.0.0
-slowapi==0.1.9redis==5.0.8
 aiosmtplib==3.0.2
+Pillow==10.4.0
+```
+
+---
+
+### `seed_data.py`
+
+```python
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from app.core.config import settings
+from app.models import User, UserRole, School, Competition
+from app.auth import get_password_hash
+from datetime import datetime, timedelta, timezone
+
+async def seed():
+    engine = create_async_engine(settings.DATABASE_URL)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    
+    async with async_session() as session:
+        # Создаём админа
+        admin = User(
+            email="admin@example.com",
+            username="admin",
+            hashed_password=get_password_hash("admin123"),
+            full_name="Admin User",
+            role=UserRole.ADMIN,
+            is_active=True
+        )
+        session.add(admin)
+        
+        # Создаём школу
+        school = School(
+            name="Спортивная школа №1",
+            city="Москва",
+            address="ул. Спортивная, 1",
+            description="Лучшая школа плавания",
+            is_active=True
+        )
+        session.add(school)
+        
+        # Создаём соревнование
+        competition = Competition(
+            name="Чемпионат Москвы по плаванию",
+            description="Ежегодные соревнования",
+            start_date=datetime.now(timezone.utc) + timedelta(days=7),
+            end_date=datetime.now(timezone.utc) + timedelta(days=9),
+            venue="Дворец спорта",
+            city="Москва",
+            status="registration_open",
+            max_participants=100
+        )
+        session.add(competition)
+        
+        await session.commit()
+        print("✅ Тестовые данные добавлены")
+        print(f"   - Админ: admin@example.com / admin123")
+        print(f"   - Школа: {school.name}")
+        print(f"   - Соревнование: {competition.name}")
+    
+    await engine.dispose()
+
+if __name__ == "__main__":
+    asyncio.run(seed())
 ```
 
 ---
 
 ## ⚠️ ПРОПУЩЕННЫЕ ФАЙЛЫ
 
-- project_context.md (слишком большой: 316KB)
+- project_context.md (слишком большой: 338KB)
 
 ---
 

@@ -6,7 +6,11 @@
         <p><strong>Дата:</strong> {{ comp.start_date.strftime('%d.%m.%Y') }} - {{ comp.end_date.strftime('%d.%m.%Y') }}</p>
         <span class="badge bg-secondary">{{ comp.status }}</span>
         <a href="/competitions/{{ comp.id }}/page" class="btn btn-sm btn-primary float-end ms-2">Подробнее</a>
+        
+        <!-- Кнопка удаления только для админа -->
+        {% if current_user and current_user.role == 'ADMIN' %}
         <button class="btn btn-sm btn-danger float-end" onclick="deleteCompetition({{ comp.id }})">Удалить</button>
+        {% endif %}
     </div>
 </div>
 {% else %}
@@ -25,5 +29,10 @@ function deleteCompetition(compId) {
             location.reload();
         });
     }
+}
+
+function getToken() {
+    const match = document.cookie.match(/access_token=([^;]+)/);
+    return match ? match[1] : null;
 }
 </script>

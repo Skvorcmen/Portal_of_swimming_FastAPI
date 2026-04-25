@@ -1,32 +1,41 @@
-from datetime import datetime, timedelta
-from collections import defaultdict
+import redis.asyncio as redis
+from app.core.config import settings
 
-# Хранилище заблокированных IP (в продакшене использовать Redis)
-blocked_ips = {}
-failed_attempts = defaultdict(int)
-
-
-def is_ip_blocked(ip: str) -> bool:
-    """Проверка, заблокирован ли IP"""
-    if ip in blocked_ips:
-        if blocked_ips[ip] > datetime.now():
-            return True
-        else:
-            del blocked_ips[ip]
-    return False
-
-
-def record_failed_attempt(ip: str) -> bool:
-    """Запись неудачной попытки. Возвращает True если IP заблокирован"""
-    failed_attempts[ip] += 1
+class BlocklistService:
+    def __init__(self):
+        self.redis_client = None
     
-    if failed_attempts[ip] >= 10:
-        blocked_ips[ip] = datetime.now() + timedelta(minutes=15)
-        return True
-    return False
+    async def get_redis(self):
+        if self.redis_client is None:
+            self.redis_client = await redis.from_url(settings.REDIS_URL, decode_responses=True)
+        return self.redis_client
+    
+    async def is_ip_blocked(self, ip: str) -> bool:
+        r = await self.get_redis()
+        blocked = await r.get(f"blocked:{ip}")
+        return blocked is not None
+    
+    async def record_failed_attempt(self, ip: str) -> bool:
+        r = await self.get_redis()
+        key = f"failed:{ip}"
+        attempts = await r.incr(key)
+        await r.expire(key, 900)
+        if attempts >= 10:
+            await r.setex(f"blocked:{ip}", 900, "1")
+            return True
+        return False
+    
+    async def reset_attempts(self, ip: str) -> None:
+        r = await self.get_redis()
+        await r.delete(f"failed:{ip}")
 
+blocklist_service = BlocklistService()
 
-def reset_attempts(ip: str) -> None:
-    """Сброс счётчика попыток"""
-    if ip in failed_attempts:
-        del failed_attempts[ip]
+async def is_ip_blocked(ip: str) -> bool:
+    return await blocklist_service.is_ip_blocked(ip)
+
+async def record_failed_attempt(ip: str) -> bool:
+    return await blocklist_service.record_failed_attempt(ip)
+
+async def reset_attempts(ip: str) -> None:
+    await blocklist_service.reset_attempts(ip)

@@ -246,14 +246,6 @@ async def download_results_protocol(
     )
 
 
-@router.get("/cached-list")
-@cached(expire=60, key_prefix="competitions_list")
-async def get_all_competitions_cached(
-    skip: int = 0,
-    limit: int = 100,
-    service: CompetitionService = Depends(get_competition_service),
-):
-    return await service.get_all_competitions(skip, limit)
 
 
 @router.get("/test-cache")
@@ -263,95 +255,196 @@ async def test_cache():
     return {"timestamp": time.time(), "message": "Cached response"}
 
 
-@router.get("/{competition_id}/results.csv")
-async def download_results_csv(
+#@router.get("/{competition_id}/results.csv")
+#async def download_results_csv(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Скачать результаты соревнования в CSV"""
+#    from app.services.csv_service import CSVService
+#    
+#    csv_buffer = await CSVService.export_competition_results(competition_id, db)
+#    return StreamingResponse(
+#        csv_buffer,
+#        media_type="text/csv",
+#        headers={
+#            "Content-Disposition": f"attachment; filename=results_{competition_id}.csv"
+#        },
+#    )
+#
+#@router.post("/{competition_id}/subscribe")
+#async def toggle_subscription(
+#    competition_id: int,
+#    current_user: User = Depends(get_current_user_optional_cookie),
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Подписаться/отписаться от результатов соревнования"""
+#    if not current_user:
+#        raise HTTPException(status_code=401, detail="Not authenticated")
+#    
+#    # Проверяем, существует ли соревнование
+#    competition = await db.execute(
+#        select(Competition).where(Competition.id == competition_id)
+#    )
+#    competition = competition.scalar_one_or_none()
+#    if not competition:
+#        raise HTTPException(status_code=404, detail="Competition not found")
+#    
+#    # Проверяем существующую подписку
+#    from app.models import CompetitionSubscription
+#    result = await db.execute(
+#        select(CompetitionSubscription).where(
+#            CompetitionSubscription.user_id == current_user.id,
+#            CompetitionSubscription.competition_id == competition_id
+#        )
+#    )
+#    subscription = result.scalar_one_or_none()
+#    
+#    if subscription:
+#        # Отписываемся
+#        await db.delete(subscription)
+#        await db.commit()
+#        return {"subscribed": False}
+#    else:
+#        # Подписываемся
+#        new_subscription = CompetitionSubscription(
+#            user_id=current_user.id,
+#            competition_id=competition_id
+#        )
+#        db.add(new_subscription)
+#        await db.commit()
+#        return {"subscribed": True}
+#
+#
+#@router.get("/{competition_id}/subscription-status")
+#async def get_subscription_status(
+#    competition_id: int,
+#    current_user: User = Depends(get_current_user_optional_cookie),
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Проверить статус подписки"""
+#    if not current_user:
+#        return {"subscribed": False}
+#    
+#    from app.models import CompetitionSubscription
+#    result = await db.execute(
+#        select(CompetitionSubscription).where(
+#            CompetitionSubscription.user_id == current_user.id,
+#            CompetitionSubscription.competition_id == competition_id
+#        )
+#    )
+#    subscription = result.scalar_one_or_none()
+#    
+#    return {"subscribed": subscription is not None}
+#
+#@router.post("/{competition_id}/send-notifications")
+#async def send_competition_notifications(
+#    competition_id: int,
+#    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Отправить уведомления подписчикам (ADMIN/SECRETARY)"""
+#    service = CompetitionService(db)
+#    await service.send_results_notifications(competition_id)
+#    return {"message": "Notifications sent successfully"}
+#
+#@router.get("/{competition_id}/rules.pdf")
+#async def download_competition_rules(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Скачать положение о соревновании в PDF"""
+#    pdf_buffer = await PDFService.generate_competition_rules(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"attachment; filename=rules_{competition_id}.pdf"
+#        },
+#    )
+#
+#@router.get("/{competition_id}/start-list/view")
+#async def view_start_list(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Просмотр стартового протокола в браузере"""
+#    pdf_buffer = await PDFService.generate_start_list(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"inline; filename=start_list_{competition_id}.pdf"
+#        },
+#    )
+#
+#@router.get("/{competition_id}/results/view")
+#async def view_results_protocol(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Просмотр итогового протокола в браузере"""
+#    pdf_buffer = await PDFService.generate_results_protocol(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"inline; filename=results_{competition_id}.pdf"
+#        },
+#    )
+#
+#@router.get("/{competition_id}/rules/view")
+#async def view_competition_rules(
+#    competition_id: int,
+#    db: AsyncSession = Depends(get_db),
+#):
+#    """Просмотр положения о соревновании в браузере"""
+#    pdf_buffer = await PDFService.generate_competition_rules(competition_id, db)
+#    return StreamingResponse(
+#        pdf_buffer,
+#        media_type="application/pdf",
+#        headers={
+#            "Content-Disposition": f"inline; filename=rules_{competition_id}.pdf"
+#        },
+#    )
+
+# ===== ЭНДПОИНТЫ ДЛЯ ПРОСМОТРА В БРАУЗЕРЕ =====
+
+@router.get("/{competition_id}/start-list/view")
+async def view_start_list(
     competition_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Скачать результаты соревнования в CSV"""
-    from app.services.csv_service import CSVService
-    
-    csv_buffer = await CSVService.export_competition_results(competition_id, db)
+    """Просмотр стартового протокола в браузере"""
+    pdf_buffer = await PDFService.generate_start_list(competition_id, db)
     return StreamingResponse(
-        csv_buffer,
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=results_{competition_id}.csv"
-        },
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=start_list_{competition_id}.pdf"},
     )
 
-@router.post("/{competition_id}/subscribe")
-async def toggle_subscription(
+@router.get("/{competition_id}/results/view")
+async def view_results_protocol(
     competition_id: int,
-    current_user: User = Depends(get_current_user_optional_cookie),
     db: AsyncSession = Depends(get_db),
 ):
-    """Подписаться/отписаться от результатов соревнования"""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Проверяем, существует ли соревнование
-    competition = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
+    """Просмотр итогового протокола в браузере"""
+    pdf_buffer = await PDFService.generate_results_protocol(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=results_{competition_id}.pdf"},
     )
-    competition = competition.scalar_one_or_none()
-    if not competition:
-        raise HTTPException(status_code=404, detail="Competition not found")
-    
-    # Проверяем существующую подписку
-    from app.models import CompetitionSubscription
-    result = await db.execute(
-        select(CompetitionSubscription).where(
-            CompetitionSubscription.user_id == current_user.id,
-            CompetitionSubscription.competition_id == competition_id
-        )
-    )
-    subscription = result.scalar_one_or_none()
-    
-    if subscription:
-        # Отписываемся
-        await db.delete(subscription)
-        await db.commit()
-        return {"subscribed": False}
-    else:
-        # Подписываемся
-        new_subscription = CompetitionSubscription(
-            user_id=current_user.id,
-            competition_id=competition_id
-        )
-        db.add(new_subscription)
-        await db.commit()
-        return {"subscribed": True}
 
-
-@router.get("/{competition_id}/subscription-status")
-async def get_subscription_status(
+@router.get("/{competition_id}/rules/view")
+async def view_competition_rules(
     competition_id: int,
-    current_user: User = Depends(get_current_user_optional_cookie),
     db: AsyncSession = Depends(get_db),
 ):
-    """Проверить статус подписки"""
-    if not current_user:
-        return {"subscribed": False}
-    
-    from app.models import CompetitionSubscription
-    result = await db.execute(
-        select(CompetitionSubscription).where(
-            CompetitionSubscription.user_id == current_user.id,
-            CompetitionSubscription.competition_id == competition_id
-        )
+    """Просмотр положения о соревновании в браузере"""
+    pdf_buffer = await PDFService.generate_competition_rules(competition_id, db)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=rules_{competition_id}.pdf"},
     )
-    subscription = result.scalar_one_or_none()
-    
-    return {"subscribed": subscription is not None}
-
-@router.post("/{competition_id}/send-notifications")
-async def send_competition_notifications(
-    competition_id: int,
-    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SECRETARY])),
-    db: AsyncSession = Depends(get_db),
-):
-    """Отправить уведомления подписчикам (ADMIN/SECRETARY)"""
-    service = CompetitionService(db)
-    await service.send_results_notifications(competition_id)
-    return {"message": "Notifications sent successfully"}

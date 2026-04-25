@@ -5,7 +5,11 @@
         <p class="card-text">{{ news.content[:200] }}...</p>
         <small class="text-muted">{{ news.published_at.strftime('%d.%m.%Y') if news.published_at else 'Черновик' }}</small>
         <a href="/news/{{ news.id }}" class="btn btn-sm btn-primary float-end ms-2">Читать</a>
+        
+        <!-- Кнопка удаления только для админа -->
+        {% if current_user and current_user.role == 'ADMIN' %}
         <button class="btn btn-sm btn-danger float-end" onclick="deleteNews({{ news.id }})">Удалить</button>
+        {% endif %}
     </div>
 </div>
 {% else %}

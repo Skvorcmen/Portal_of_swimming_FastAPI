@@ -3,30 +3,19 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from app.routers import auth
-from app.routers import branches
 from app.core.exceptions import BusinessError
 from app.routers import competitions
-from app.routers import branches
 from app.routers import age_categories
-from app.routers import branches
 from app.routers import swim_events
 from app.routers import branches
 from app.routers import entries
-from app.routers import branches
 from app.routers import heats
-from app.routers import branches
 from app.routers import chat
-from app.routers import branches
 from app.routers import news, articles
-from app.routers import branches
 from app.routers import schools, coaches
-from app.routers import branches
 from app.routers import coach_profiles
-from app.routers import branches
 from app.routers import athletes
-from app.routers import branches
 from app.routers import coach_dashboard
-from app.routers import branches
 from app.core.rate_limit import setup_rate_limit
 from app.core.blocklist import is_ip_blocked
 from app.models import User
@@ -113,7 +102,8 @@ async def test_page(request: Request):
 @app.middleware("http")
 async def blocklist_middleware(request: Request, call_next):
     ip = request.client.host
-    if is_ip_blocked(ip):
+    from app.core.blocklist import blocklist_service
+    if await blocklist_service.is_ip_blocked(ip):
         return JSONResponse(
             status_code=429, content={"detail": "IP blocked for 15 minutes"}
         )

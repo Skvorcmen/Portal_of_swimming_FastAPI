@@ -1,9 +1,12 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlalchemy import text
 import json
 from datetime import datetime, timezone
-from app.database import async_session_maker
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
 from app.core.logging_config import logger
+from app.auth import get_current_user_from_websocket
 
 router = APIRouter(tags=["chat"])
 
@@ -54,24 +57,25 @@ manager = ConnectionManager()
 async def websocket_chat(
     websocket: WebSocket,
     room: str,
+    db: AsyncSession = Depends(get_db)
 ):
-    # Для разработки - создаем тестового пользователя если нет токена
-    # В production нужно использовать реальную аутентификацию
     await websocket.accept()
     
-    # Временно используем тестового пользователя для отладки
-    test_user_id = 1
-    test_username = "TestUser"
+    # Аутентификация
+    user = await get_current_user_from_websocket(websocket, db)
+    if not user:
+        await websocket.close(code=1008, reason="Unauthorized")
+        return
     
-    logger.info(f"WebSocket connected with test user: {test_username} to room {room}")
-    await manager.connect(websocket, room, test_user_id, test_username)
+    logger.info(f"WebSocket connected: user {user.username} (ID: {user.id}) to room {room}")
+    await manager.connect(websocket, room, user.id, user.username)
     
     # Загружаем историю сообщений
-    async with async_session_maker() as db:
+    async with db as session:
         try:
-            result = await db.execute(
+            result = await session.execute(
                 text("""
-                    SELECT cm.id, cm.message, cm.created_at, u.username
+                    SELECT cm.message, cm.created_at, u.username
                     FROM chat_messages cm
                     JOIN "user" u ON u.id = cm.user_id
                     WHERE cm.room = :room
@@ -101,29 +105,29 @@ async def websocket_chat(
             if not message_text:
                 continue
             
-            logger.info(f"Received message from {test_username}: {message_text[:50]}")
+            logger.info(f"Received message from {user.username}: {message_text[:50]}")
             
             # Сохраняем сообщение
-            async with async_session_maker() as db:
+            async with db as session:
                 try:
                     now = datetime.now(timezone.utc)
-                    await db.execute(
+                    await session.execute(
                         text("""
                             INSERT INTO chat_messages (room, user_id, message, created_at)
                             VALUES (:room, :user_id, :message, :created_at)
                         """),
                         {
                             "room": room,
-                            "user_id": test_user_id,
+                            "user_id": user.id,
                             "message": message_text,
                             "created_at": now
                         }
                     )
-                    await db.commit()
+                    await session.commit()
                     
                     broadcast_message = {
                         "type": "message",
-                        "user": test_username,
+                        "user": user.username,
                         "message": message_text,
                         "created_at": now.isoformat(),
                     }
@@ -132,10 +136,10 @@ async def websocket_chat(
                     
                 except Exception as e:
                     logger.error(f"Error saving message: {e}")
-                    await db.rollback()
+                    await session.rollback()
                     
     except WebSocketDisconnect:
-        logger.info(f"User {test_username} disconnected")
+        logger.info(f"User {user.username} disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:

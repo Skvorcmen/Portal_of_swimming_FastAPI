@@ -12,6 +12,7 @@ jinja2==3.1.4
 aiofiles==24.1.0
 openpyxl==3.1.5
 slowapi==0.1.9
+redis==5.0.8
 sentry-sdk==2.19.0
 structlog==25.2.0
 email-validator==2.2.0
@@ -22,5 +23,5 @@ pytest-asyncio==0.24.0
 httpx==0.28.1
 factory-boy==3.3.1
 faker==30.0.0
-slowapi==0.1.9redis==5.0.8
 aiosmtplib==3.0.2
+Pillow==10.4.0

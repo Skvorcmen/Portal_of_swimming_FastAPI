@@ -1,3 +1,7 @@
+from sqlalchemy import select
+from datetime import datetime, timezone
+from app.core.logging_config import logger
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from app.repositories.competition_repository import CompetitionRepository
