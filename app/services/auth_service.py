@@ -36,6 +36,8 @@ class AuthService:
         user = await self.user_repo.get_by_username(username)
         if not user or not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError()
+        if not user.is_active:
+            raise InvalidCredentialsError("Account is disabled")
         access_token = create_access_token(data={"sub": str(user.id)})
         refresh_token_obj = await self.refresh_token_repo.create_token(user.id)
         return access_token, refresh_token_obj.token

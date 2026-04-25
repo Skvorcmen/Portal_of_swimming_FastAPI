@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 from typing import List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.services.school_service import SchoolService
@@ -48,7 +48,7 @@ async def school_detail_page(
             "school": school, 
             "branches": branches,
             "head_coach": head_coach,
-            "now": datetime.now()
+            "now": datetime.now(timezone.utc)
         }
     )
 

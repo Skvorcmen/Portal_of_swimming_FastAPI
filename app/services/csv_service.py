@@ -2,7 +2,7 @@ import csv
 from io import StringIO, BytesIO
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class CSVService:
@@ -66,7 +66,7 @@ class CSVService:
                 row.place or '-',
                 row.heat_number,
                 row.lane,
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
             ])
         
         # Конвертируем в BytesIO для отправки

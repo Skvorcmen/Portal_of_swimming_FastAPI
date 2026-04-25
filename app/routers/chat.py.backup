@@ -59,6 +59,8 @@ async def websocket_chat(
     room: str,
     db: AsyncSession = Depends(get_db)
 ):
+    await websocket.accept()
+    
     # Аутентификация
     user = await get_current_user_from_websocket(websocket, db)
     if not user:

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.services.coach_service import CoachService
@@ -61,7 +61,7 @@ async def coach_detail_page(
             "request": request,
             "coach": coach,
             "school": school,
-            "now": datetime.now()
+            "now": datetime.now(timezone.utc)
         }
     )
 
